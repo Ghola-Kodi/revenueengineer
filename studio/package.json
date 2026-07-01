@@ -1,0 +1,14 @@
+{
+  "name": "reveng-studio",
+  "private": true,
+  "scripts": {
+    "dev": "sanity start",
+    "build": "sanity build",
+    "deploy": "sanity deploy"
+  },
+  "dependencies": {
+    "@sanity/cli": "^3.0.0",
+    "@sanity/base": "^3.0.0",
+    "@sanity/desk-tool": "^3.0.0"
+  }
+}
