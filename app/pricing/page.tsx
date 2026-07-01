@@ -1,15 +1,10 @@
+"use client"
+
 import { useEffect, useState } from "react"
-import type { Metadata } from "next"
 import Link from "next/link"
 import { Check, ArrowRight, Star } from "lucide-react"
 import { NewsletterSection } from "@/components/newsletter-section"
 import { useTestMode } from "@/lib/test-auth"
-
-export const metadata: Metadata = {
-  title: "Pricing | RevEng",
-  description:
-    "Revenue recovery consulting packages. Stripe audit, dunning engine setup, and ongoing retention retainers for SaaS companies.",
-}
 
 const tiers = [
   {
