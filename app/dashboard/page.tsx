@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import type { Session } from "@supabase/supabase-js"
@@ -11,7 +11,7 @@ import { getFakePurchases, getFakeProducts, getFakeProfileByEmail, getFakeAuthSe
 
 type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "error"
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const testMode = useTestMode()
@@ -242,5 +242,22 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8">
+          <div className="flex flex-col items-center justify-center space-y-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#635bff] border-t-transparent" />
+            <p className="text-base text-[#3b5a82]">Loading your dashboard...</p>
+          </div>
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   )
 }
