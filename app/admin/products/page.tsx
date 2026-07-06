@@ -9,7 +9,7 @@ export default function AdminProductsPage() {
   const router = useRouter()
   const testMode = useTestMode()
   const [products, setProducts] = useState<any[]>([])
-  const [authorized, setAuthorized] = useState(true)
+  const [authorized, setAuthorized] = useState<boolean | null>(null)
   const [form, setForm] = useState({
     name: "",
     description: "",
