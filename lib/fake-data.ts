@@ -59,13 +59,20 @@ const STORAGE_KEYS = {
   session: "reveng_fake_session",
 }
 
-function getStorage() {
-  if (typeof window === "undefined") return null
-  return window.localStorage
+// This module is used both from client components (where it persists to
+// localStorage) and from API route handlers (which always run on the
+// server, where `window` never exists). We use `globalThis` rather than a
+// plain module-level variable so the in-memory fallback stays stable
+// across hot-reloads / re-imports in dev.
+const globalForFakeData = globalThis as unknown as {
+  __revengFakeStore?: Record<string, unknown>
 }
+const serverStore = (globalForFakeData.__revengFakeStore ??= {})
 
 function readJson<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback
+  if (typeof window === "undefined") {
+    return key in serverStore ? (serverStore[key] as T) : fallback
+  }
   try {
     const raw = window.localStorage.getItem(key)
     return raw ? JSON.parse(raw) : fallback
@@ -75,7 +82,10 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 function writeJson(key: string, value: unknown) {
-  if (typeof window === "undefined") return
+  if (typeof window === "undefined") {
+    serverStore[key] = value
+    return
+  }
   window.localStorage.setItem(key, JSON.stringify(value))
 }
 
@@ -251,26 +261,27 @@ export function getFakePortfolioItems(): FakePortfolioItem[] {
 }
 
 export function setFakeAuthSession(session: { id: string; email: string; role: "admin" | "customer" }) {
-  if (typeof window === "undefined") return session
-  window.localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session))
+  writeJson(STORAGE_KEYS.session, session)
   return session
 }
 
 export function getFakeAuthSession() {
-  if (typeof window === "undefined") return null
-  const raw = window.localStorage.getItem(STORAGE_KEYS.session)
-  return raw ? JSON.parse(raw) : null
+  return readJson<{ id: string; email: string; role: "admin" | "customer" } | null>(STORAGE_KEYS.session, null)
 }
 
 export function clearFakeAuthSession() {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(STORAGE_KEYS.session)
+  } else {
+    delete serverStore[STORAGE_KEYS.session]
   }
 }
 
 export function clearFakeData() {
   if (typeof window !== "undefined") {
     Object.values(STORAGE_KEYS).forEach((key) => window.localStorage.removeItem(key))
+  } else {
+    Object.values(STORAGE_KEYS).forEach((key) => delete serverStore[key])
   }
   seedDefaults()
 }
