@@ -28,11 +28,14 @@ function DashboardContent() {
   useEffect(() => {
     if (!testMode) return
 
-    const activeSession = authSession ?? getTestSession()
+    // Only treat the user as authenticated if a real (store or fake-session)
+    // sign-in happened. getTestSession() fabricates a session on demand and
+    // must not be used as the fallback here, or this check is always true
+    // and anyone can land on /dashboard without ever signing in.
     const fakeSession = getFakeAuthSession()
-    if (activeSession || fakeSession) {
-      const sessionValue = activeSession ?? ({ user: { id: fakeSession.id, email: fakeSession.email } } as Session)
-      setSession(sessionValue)
+    const activeSession = authSession ?? (fakeSession ? getTestSession() : null)
+    if (activeSession) {
+      setSession(activeSession)
       setStatus("authenticated")
     } else {
       setError("Test session not available")
