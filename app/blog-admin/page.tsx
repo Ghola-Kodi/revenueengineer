@@ -5,6 +5,7 @@ import { z } from "zod"
 import { useRouter } from "next/navigation"
 import { useTestMode, getTestSession } from "@/lib/test-auth"
 import { useAuthStore } from "@/lib/auth-store"
+import { createBrowserSupabaseClient } from "@/lib/supabase-client"
 import { ArrowLeft, Plus, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { getFakeAuthSession } from "@/lib/fake-data"
@@ -21,6 +22,7 @@ export default function BlogAdminPage() {
   const router = useRouter()
   const testMode = useTestMode()
   const [session, setSession] = useState<any>(null)
+  const [realRole, setRealRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [posts, setPosts] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -54,8 +56,44 @@ export default function BlogAdminPage() {
         .then((response) => response.json())
         .then((data) => setPosts(data.posts ?? []))
         .catch(() => setPosts([]))
-    } else {
-      router.replace("/login")
+      return
+    }
+
+    // Real (non-test-mode) auth: this previously redirected to /login
+    // unconditionally, so a genuinely signed-in user was bounced back to
+    // login every time they opened this page. Check the real session
+    // instead — from the store first (set by the OAuth callback / dashboard),
+    // falling back to a direct Supabase lookup for a hard refresh.
+    let isMounted = true
+    const resolveRealSession = async () => {
+      const supabase = createBrowserSupabaseClient()
+      let currentSession = authSession
+      if (!currentSession) {
+        const { data } = await supabase.auth.getSession()
+        currentSession = data.session
+        if (currentSession && isMounted) setAuthSession(currentSession)
+      }
+      if (!isMounted) return
+      if (!currentSession) {
+        router.replace("/login")
+        setLoading(false)
+        return
+      }
+      setSession(currentSession)
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", currentSession.user.id)
+        .single()
+      if (isMounted) {
+        setRealRole(profile?.role ?? "customer")
+        setLoading(false)
+      }
+    }
+    resolveRealSession()
+    return () => {
+      isMounted = false
     }
   }, [testMode, router, authSession, setAuthSession])
 
@@ -132,7 +170,7 @@ export default function BlogAdminPage() {
     )
   }
 
-  const role = (session?.user?.app_metadata?.role ?? (getFakeAuthSession()?.role ?? "customer")) as string
+  const role = testMode ? (getFakeAuthSession()?.role ?? "customer") : (realRole ?? "customer")
   if (role !== "admin") {
     return (
       <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8 text-center">
