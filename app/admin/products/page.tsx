@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useTestMode } from "@/lib/test-auth"
 import { getFakeAuthSession } from "@/lib/fake-data"
+import { createBrowserSupabaseClient } from "@/lib/supabase-client"
 
 export default function AdminProductsPage() {
   const router = useRouter()
@@ -21,8 +22,38 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     if (!testMode) {
-      router.replace("/dashboard")
-      return
+      // Previously this redirected to /dashboard unconditionally, so a
+      // genuinely signed-in user could never reach this page in real mode.
+      // Check the real Supabase session before deciding.
+      let isMounted = true
+      const checkRealSession = async () => {
+        const supabase = createBrowserSupabaseClient()
+        const { data } = await supabase.auth.getSession()
+        if (!isMounted) return
+        if (!data.session) {
+          setAuthorized(false)
+          return
+        }
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", data.session.user.id)
+          .single()
+        if (!isMounted) return
+        if (profile?.role !== "admin") {
+          setAuthorized(false)
+        } else {
+          setAuthorized(true)
+          fetch("/api/products")
+            .then((response) => response.json())
+            .then((responseData) => setProducts(responseData.products ?? []))
+            .catch(() => setProducts([]))
+        }
+      }
+      checkRealSession()
+      return () => {
+        isMounted = false
+      }
     }
 
     const session = getFakeAuthSession()
