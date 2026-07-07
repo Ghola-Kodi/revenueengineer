@@ -14,7 +14,15 @@ export const createBrowserSupabaseClient = () => {
     browserClient = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         flowType: "pkce",
-        detectSessionInUrl: true,
+        // The OAuth callback page (app/auth/callback) manually calls
+        // exchangeCodeForSession(code). If detectSessionInUrl is also true,
+        // the client auto-detects the `?code=` param on creation and tries
+        // to exchange it itself, racing the manual call above. Whichever
+        // wins consumes and deletes the PKCE verifier from storage; the
+        // loser then fails with "PKCE code verifier not found in storage"
+        // even on a normal same-browser, same-device sign-in. Keep this
+        // false since the callback page owns the exchange.
+        detectSessionInUrl: false,
         persistSession: true,
         autoRefreshToken: true,
       },
