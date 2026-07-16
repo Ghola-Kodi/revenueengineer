@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { getTestMode } from "@/lib/test-auth"
-import { deleteFakePost, getFakePosts, saveFakePost } from "@/lib/fake-data"
-import { createBlogPost, getAllBlogPosts } from "@/lib/sanity"
+import { getTestMode } from "../../../../lib/test-auth"
+import { deleteFakePost, getFakePosts, saveFakePost } from "../../../../lib/fake-data"
+import { createBlogPost, getAllBlogPosts } from "../../../../lib/sanity"
 
 export async function GET() {
   if (getTestMode()) {
