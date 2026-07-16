@@ -2,11 +2,10 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Calendar, Clock, User } from "lucide-react"
-import format from "date-fns/format"
-import parseISO from "date-fns/parseISO"
 import { RevenueCTA } from "@/components/revenue-cta"
 import { NewsletterSection } from "@/components/newsletter-section"
 import { getBlogPostBySlug, getBlogSlugs } from "@/lib/sanity"
+import { formatDate } from "@/lib/utils"
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>
@@ -185,7 +184,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             </span>
             <span className="flex items-center gap-1 text-xs text-[#3b5a82]">
               <Calendar className="h-3.5 w-3.5" />
-              {format(parseISO(post.date), "MMMM d, yyyy")}
+              {formatDate(post.date)}
             </span>
             <span className="flex items-center gap-1 text-xs text-[#3b5a82]">
               <Clock className="h-3.5 w-3.5" />
