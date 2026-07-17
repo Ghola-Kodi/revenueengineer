@@ -77,9 +77,11 @@
   }
 }
 {
+  {
   "dependencies": {
     // ... other dependencies ...
-    "@sanity/client": "^6.0.0",  // Add this line
+    "@sanity/client": "^6.28.4",
+    "@sanity/image-url": "^1.1.0",  // Add this line
     // ... other dependencies ...
   }
 }
