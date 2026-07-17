@@ -76,3 +76,10 @@
     "typescript": "5.7.3"
   }
 }
+{
+  "dependencies": {
+    // ... other dependencies ...
+    "@sanity/client": "^6.0.0",  // Add this line
+    // ... other dependencies ...
+  }
+}
