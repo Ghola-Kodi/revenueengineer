@@ -3,9 +3,9 @@ import { blogPosts } from "./blog-data"
 import { demoPostsData } from "./demo-posts"
 import type { BlogPost } from "./types"
 
-const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? "production"
+const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? "webhookengineer"
 const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
-const useCdn = process.env.NODE_ENV === "production"
+const useCdn = process.env.NODE_ENV === "webhookengineer"
 
 const sanityClient = projectId && projectId !== "" && projectId !== "your_project_id"
   ? createClient({
