@@ -8,6 +8,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-client"
 import { useTestMode, getTestSession } from "@/lib/test-auth"
 import { useAuthStore } from "@/lib/auth-store"
 import { getFakePurchases, getFakeProducts, getFakeProfileByEmail, getFakeAuthSession } from "@/lib/fake-data"
+import { FileText, PlusCircle, Users, TrendingUp } from "lucide-react"
 
 type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "error"
 
@@ -23,6 +24,7 @@ function DashboardContent() {
   const [error, setError] = useState<string | null>(null)
   const [purchases, setPurchases] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
+  const [blogStats, setBlogStats] = useState({ total: 0, published: 0, drafts: 0 })
 
   // --- Test mode: short-circuit, no Supabase involved ---
   useEffect(() => {
@@ -37,6 +39,8 @@ function DashboardContent() {
     if (activeSession) {
       setSession(activeSession)
       setStatus("authenticated")
+      // Fetch blog stats in test mode
+      fetchBlogStats()
     } else {
       setError("Test session not available")
       setStatus("error")
@@ -69,6 +73,7 @@ function DashboardContent() {
         setAuthStoreSession(newSession)
         setStatus("authenticated")
         setError(null)
+        fetchBlogStats()
       } else if (event === "SIGNED_OUT") {
         setSession(null)
         setAuthStoreSession(null)
@@ -92,6 +97,7 @@ function DashboardContent() {
         setSession(existing)
         setAuthStoreSession(existing)
         setStatus("authenticated")
+        fetchBlogStats()
       }
       // If nothing exists yet, stay in "checking" — give the auth event
       // (fired by the in-flight OAuth code exchange, if any) a chance to land.
@@ -110,6 +116,22 @@ function DashboardContent() {
       subscription.unsubscribe()
     }
   }, [testMode, session?.user?.email, setAuthStoreSession])
+
+  // Fetch blog stats from the API
+  const fetchBlogStats = async () => {
+    try {
+      const response = await fetch("/api/blog/posts")
+      const data = await response.json()
+      const posts = data.posts ?? []
+      setBlogStats({
+        total: posts.length,
+        published: posts.length,
+        drafts: 0, // You can add draft status later
+      })
+    } catch (error) {
+      console.error("Failed to fetch blog stats:", error)
+    }
+  }
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -197,13 +219,72 @@ function DashboardContent() {
           </div>
         )}
 
+        {/* Blog Stats Cards */}
+        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[#3b5a82]">Total Posts</p>
+                <p className="text-3xl font-bold text-[#0a2540]">{blogStats.total}</p>
+              </div>
+              <div className="rounded-full bg-[#e3eaff] p-3">
+                <FileText className="h-6 w-6 text-[#635bff]" />
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[#3b5a82]">Published</p>
+                <p className="text-3xl font-bold text-[#0a2540]">{blogStats.published}</p>
+              </div>
+              <div className="rounded-full bg-green-50 p-3">
+                <TrendingUp className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[#3b5a82]">Drafts</p>
+                <p className="text-3xl font-bold text-[#0a2540]">{blogStats.drafts}</p>
+              </div>
+              <div className="rounded-full bg-yellow-50 p-3">
+                <Users className="h-6 w-6 text-yellow-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <Link
-            href="/blog-admin"
-            className="rounded-3xl border border-[#d7e5fc] bg-white p-6 shadow-sm shadow-[#ccd9ff]/40 transition-all hover:border-[#635bff] hover:shadow-lg"
+            href="/blog/admin"
+            className="rounded-3xl border border-[#d7e5fc] bg-white p-6 shadow-sm shadow-[#ccd9ff]/40 transition-all hover:border-[#635bff] hover:shadow-lg group"
           >
-            <h3 className="text-lg font-semibold text-[#0a2540]">Manage Blog</h3>
-            <p className="mt-2 text-sm text-[#3b5a82]">Create and edit blog posts</p>
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-[#e3eaff] p-2 group-hover:bg-[#635bff] group-hover:text-white transition-colors">
+                <FileText className="h-5 w-5 text-[#635bff] group-hover:text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-[#0a2540]">Manage Blog</h3>
+                <p className="text-sm text-[#3b5a82]">Create and edit blog posts</p>
+              </div>
+            </div>
+          </Link>
+
+          <Link
+            href="/blog/admin?action=new"
+            className="rounded-3xl border border-[#d7e5fc] bg-white p-6 shadow-sm shadow-[#ccd9ff]/40 transition-all hover:border-[#635bff] hover:shadow-lg group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-green-50 p-2 group-hover:bg-[#635bff] group-hover:text-white transition-colors">
+                <PlusCircle className="h-5 w-5 text-green-600 group-hover:text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-[#0a2540]">New Post</h3>
+                <p className="text-sm text-[#3b5a82]">Write a new blog article</p>
+              </div>
+            </div>
           </Link>
 
           <div className="rounded-3xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
