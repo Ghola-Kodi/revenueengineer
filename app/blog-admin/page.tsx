@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { useTestMode, getTestSession } from "@/lib/test-auth"
 import { useAuthStore } from "@/lib/auth-store"
 import { createBrowserSupabaseClient } from "@/lib/supabase-client"
-import { ArrowLeft, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Search, X, Edit, Eye, Filter, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { getFakeAuthSession } from "@/lib/fake-data"
 
@@ -25,7 +25,12 @@ export default function BlogAdminPage() {
   const [realRole, setRealRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [posts, setPosts] = useState<any[]>([])
+  const [filteredPosts, setFilteredPosts] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("all")
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [formData, setFormData] = useState({
     title: "",
     excerpt: "",
@@ -37,6 +42,9 @@ export default function BlogAdminPage() {
 
   const authSession = useAuthStore((state) => state.session)
   const setAuthSession = useAuthStore((state) => state.setSession)
+
+  // Get unique categories for filter
+  const categories = ["all", ...new Set(posts.map(p => p.category))]
 
   useEffect(() => {
     if (testMode) {
@@ -54,16 +62,18 @@ export default function BlogAdminPage() {
 
       fetch("/api/blog/posts")
         .then((response) => response.json())
-        .then((data) => setPosts(data.posts ?? []))
-        .catch(() => setPosts([]))
+        .then((data) => {
+          const postsData = data.posts ?? []
+          setPosts(postsData)
+          setFilteredPosts(postsData)
+        })
+        .catch(() => {
+          setPosts([])
+          setFilteredPosts([])
+        })
       return
     }
 
-    // Real (non-test-mode) auth: this previously redirected to /login
-    // unconditionally, so a genuinely signed-in user was bounced back to
-    // login every time they opened this page. Check the real session
-    // instead — from the store first (set by the OAuth callback / dashboard),
-    // falling back to a direct Supabase lookup for a hard refresh.
     let isMounted = true
     const resolveRealSession = async () => {
       const supabase = createBrowserSupabaseClient()
@@ -96,6 +106,28 @@ export default function BlogAdminPage() {
       isMounted = false
     }
   }, [testMode, router, authSession, setAuthSession])
+
+  // Filter posts when search or category changes
+  useEffect(() => {
+    let filtered = posts
+    
+    // Apply search filter
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim()
+      filtered = filtered.filter(post => 
+        post.title.toLowerCase().includes(term) ||
+        post.excerpt.toLowerCase().includes(term) ||
+        post.slug.toLowerCase().includes(term)
+      )
+    }
+    
+    // Apply category filter
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter(post => post.category === selectedCategory)
+    }
+    
+    setFilteredPosts(filtered)
+  }, [searchTerm, selectedCategory, posts])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -135,7 +167,9 @@ export default function BlogAdminPage() {
       .then((response) => response.json())
       .then((data) => {
         if (data.post) {
-          setPosts((current) => [data.post, ...current])
+          const updatedPosts = [data.post, ...posts]
+          setPosts(updatedPosts)
+          setFilteredPosts(updatedPosts)
         }
       })
     setFormData({
@@ -149,9 +183,24 @@ export default function BlogAdminPage() {
   }
 
   const handleDelete = (slug: string) => {
+    setDeleteLoading(true)
     fetch(`/api/blog/posts?slug=${encodeURIComponent(slug)}`, { method: "DELETE" })
-      .then(() => setPosts((current) => current.filter((post) => post.slug !== slug)))
+      .then(() => {
+        const updatedPosts = posts.filter((post) => post.slug !== slug)
+        setPosts(updatedPosts)
+        setFilteredPosts(updatedPosts)
+        setShowDeleteConfirm(null)
+      })
       .catch(() => {})
+      .finally(() => {
+        setDeleteLoading(false)
+      })
+  }
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchTerm("")
+    setSelectedCategory("all")
   }
 
   if (loading) {
@@ -190,7 +239,7 @@ export default function BlogAdminPage() {
       </Link>
 
       <div className="mt-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <p className="font-mono text-xs uppercase tracking-widest text-[#635bff]">
               Blog Admin
@@ -198,6 +247,9 @@ export default function BlogAdminPage() {
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#0a2540]">
               Manage Posts
             </h1>
+            <p className="mt-1 text-sm text-[#3b5a82]">
+              {posts.length} total post{posts.length !== 1 ? "s" : ""}
+            </p>
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
@@ -206,6 +258,54 @@ export default function BlogAdminPage() {
             <Plus className="h-4 w-4" />
             New Post
           </button>
+        </div>
+
+        {/* Search and Filter Bar */}
+        <div className="mt-6 flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8999b3]" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search posts by title, excerpt, or slug..."
+              className="w-full rounded-lg border border-[#d7e5fc] pl-9 pr-10 py-2 text-[#0a2540] placeholder-[#8999b3] focus:border-[#635bff] focus:outline-none"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8999b3] hover:text-[#0a2540]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          
+          <div className="flex gap-2">
+            <div className="relative">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="appearance-none rounded-lg border border-[#d7e5fc] px-4 py-2 pr-8 text-[#0a2540] focus:border-[#635bff] focus:outline-none"
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>
+                    {cat === "all" ? "All Categories" : cat}
+                  </option>
+                ))}
+              </select>
+              <Filter className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8999b3] pointer-events-none" />
+            </div>
+            
+            {(searchTerm || selectedCategory !== "all") && (
+              <button
+                onClick={clearFilters}
+                className="rounded-lg border border-[#d7e5fc] px-4 py-2 text-sm text-[#3b5a82] hover:bg-[#f8fbff] transition-colors"
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
         </div>
 
         {showForm && (
@@ -275,7 +375,7 @@ export default function BlogAdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[#0a2540]\">Content</label>
+                <label className="block text-sm font-medium text-[#0a2540]">Content</label>
                 <textarea
                   required
                   value={formData.content}
@@ -312,48 +412,105 @@ export default function BlogAdminPage() {
         )}
 
         <div className="mt-10">
-          <h3 className="text-lg font-semibold text-[#0a2540]">
-            {posts.length} Post{posts.length !== 1 ? "s" : ""}
-          </h3>
-
-          {posts.length === 0 ? (
-            <div className="mt-6 rounded-2xl bg-[#f8fbff] p-8 text-center">
-              <p className="text-[#3b5a82]">No posts yet. Create one to get started!</p>
+          {filteredPosts.length === 0 ? (
+            <div className="rounded-2xl bg-[#f8fbff] p-12 text-center">
+              {posts.length === 0 ? (
+                <>
+                  <p className="text-[#3b5a82]">No posts yet. Create one to get started!</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[#3b5a82]">No posts match your filters.</p>
+                  <button
+                    onClick={clearFilters}
+                    className="mt-4 text-sm text-[#635bff] hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                </>
+              )}
             </div>
           ) : (
-            <div className="mt-6 space-y-4">
-              {posts.map((post) => (
+            <div className="space-y-4">
+              {filteredPosts.map((post) => (
                 <div
                   key={post.slug}
-                  className="flex items-start justify-between rounded-2xl border border-[#d7e5fc] bg-white p-6"
+                  className="flex items-start justify-between rounded-2xl border border-[#d7e5fc] bg-white p-6 transition-shadow hover:shadow-md"
                 >
-                  <div className="flex-1">
-                    <Link href={`/blog/${post.slug}`} className="block">
+                  <div className="flex-1 min-w-0">
+                    <Link href={`/blog/${post.slug}`} className="block" target="_blank">
                       <h4 className="text-lg font-semibold text-[#0a2540] hover:text-[#635bff] transition-colors">
                         {post.title}
                       </h4>
                     </Link>
-                    <p className="mt-1 text-sm text-[#3b5a82]">{post.excerpt}</p>
-                    <div className="mt-3 flex items-center gap-3">
+                    <p className="mt-1 text-sm text-[#3b5a82] line-clamp-2">{post.excerpt}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
                       <span className="inline-block rounded-full bg-[#e3eaff] px-3 py-1 font-mono text-xs text-[#0a2540]">
                         {post.category}
                       </span>
                       <span className="text-xs text-[#3b5a82]">{post.date}</span>
                       <span className="text-xs text-[#3b5a82]">{post.readTime}</span>
+                      <span className="text-xs text-[#3b5a82]">
+                        /blog/{post.slug}
+                      </span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDelete(post.slug)}
-                    className="ml-4 rounded-full p-2 text-[#8999b3] transition-colors hover:bg-red-50 hover:text-red-600"
-                    title="Delete post"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
+                  <div className="flex items-center gap-2 ml-4">
+                    <Link
+                      href={`/blog/${post.slug}`}
+                      target="_blank"
+                      className="rounded-full p-2 text-[#8999b3] transition-colors hover:bg-blue-50 hover:text-[#635bff]"
+                      title="View post"
+                    >
+                      <Eye className="h-5 w-5" />
+                    </Link>
+                    <button
+                      onClick={() => setShowDeleteConfirm(post.slug)}
+                      className="rounded-full p-2 text-[#8999b3] transition-colors hover:bg-red-50 hover:text-red-600"
+                      title="Delete post"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <div className="flex items-center gap-3 text-red-600">
+                <AlertTriangle className="h-6 w-6" />
+                <h3 className="text-lg font-semibold">Delete Post</h3>
+              </div>
+              <p className="mt-4 text-[#3b5a82]">
+                Are you sure you want to delete this post? This action cannot be undone.
+              </p>
+              <p className="mt-2 text-sm font-medium text-[#0a2540]">
+                Slug: <span className="font-mono">{showDeleteConfirm}</span>
+              </p>
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={() => handleDelete(showDeleteConfirm)}
+                  disabled={deleteLoading}
+                  className="flex-1 rounded-full bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deleteLoading ? "Deleting..." : "Yes, Delete"}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(null)}
+                  disabled={deleteLoading}
+                  className="flex-1 rounded-full border border-[#d7e5fc] px-4 py-2.5 text-sm font-semibold text-[#0a2540] transition-colors hover:bg-[#f8fbff] disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
