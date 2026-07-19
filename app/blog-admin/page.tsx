@@ -1,349 +1,360 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import Link from "next/link"
-import type { Session } from "@supabase/supabase-js"
-import { createBrowserSupabaseClient } from "@/lib/supabase-client"
+import { useState, useEffect } from "react"
+import { z } from "zod"
+import { useRouter } from "next/navigation"
 import { useTestMode, getTestSession } from "@/lib/test-auth"
 import { useAuthStore } from "@/lib/auth-store"
-import { getFakePurchases, getFakeProducts, getFakeProfileByEmail, getFakeAuthSession } from "@/lib/fake-data"
-import { FileText, PlusCircle, Users, TrendingUp } from "lucide-react"
+import { createBrowserSupabaseClient } from "@/lib/supabase-client"
+import { ArrowLeft, Plus, Trash2 } from "lucide-react"
+import Link from "next/link"
+import { getFakeAuthSession } from "@/lib/fake-data"
 
-type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "error"
+const postSchema = z.object({
+  title: z.string().min(10, "Title must be at least 10 characters"),
+  excerpt: z.string().min(20, "Excerpt must be at least 20 characters"),
+  category: z.string().min(3),
+  readTime: z.string().min(3),
+  content: z.string().min(50, "Content must be at least 50 characters"),
+})
 
-function DashboardContent() {
+export default function BlogAdminPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const testMode = useTestMode()
+  const [session, setSession] = useState<any>(null)
+  const [realRole, setRealRole] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [posts, setPosts] = useState<any[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [formData, setFormData] = useState({
+    title: "",
+    excerpt: "",
+    category: "Revenue Recovery",
+    readTime: "5 min read",
+    content: "",
+  })
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+
   const authSession = useAuthStore((state) => state.session)
-  const setAuthStoreSession = useAuthStore((state) => state.setSession)
+  const setAuthSession = useAuthStore((state) => state.setSession)
 
-  const [status, setStatus] = useState<AuthStatus>("checking")
-  const [session, setSession] = useState<Session | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [purchases, setPurchases] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
-  const [blogStats, setBlogStats] = useState({ total: 0, published: 0, drafts: 0 })
-
-  // --- Test mode: short-circuit, no Supabase involved ---
-  useEffect(() => {
-    if (!testMode) return
-
-    // Only treat the user as authenticated if a real (store or fake-session)
-    // sign-in happened. getTestSession() fabricates a session on demand and
-    // must not be used as the fallback here, or this check is always true
-    // and anyone can land on /dashboard without ever signing in.
-    const fakeSession = getFakeAuthSession()
-    const activeSession = authSession ?? (fakeSession ? getTestSession() : null)
-    if (activeSession) {
-      setSession(activeSession)
-      setStatus("authenticated")
-      // Fetch blog stats in test mode
-      fetchBlogStats()
-    } else {
-      setError("Test session not available")
-      setStatus("error")
-    }
-  }, [testMode, authSession])
-
-  // --- Real auth: single source of truth is onAuthStateChange ---
   useEffect(() => {
     if (testMode) {
-      const initialProducts = getFakeProducts()
-      const currentEmail = (session?.user?.email ?? getFakeAuthSession()?.email ?? "demo@reveng.local") as string
-      setProducts(initialProducts)
-      setPurchases(getFakePurchases(getFakeProfileByEmail(currentEmail)?.id ?? "demo-user-123"))
+      const fakeSession = getFakeAuthSession()
+      if (authSession) {
+        setSession(authSession)
+      } else if (fakeSession) {
+        setSession({ user: { id: fakeSession.id, email: fakeSession.email, app_metadata: { role: fakeSession.role } } } as any)
+      } else {
+        const testSession = getTestSession()
+        setSession(testSession)
+        setAuthSession(testSession)
+      }
+      setLoading(false)
+
+      fetch("/api/blog/posts")
+        .then((response) => response.json())
+        .then((data) => setPosts(data.posts ?? []))
+        .catch(() => setPosts([]))
       return
     }
 
-    const supabase = createBrowserSupabaseClient()
+    // Real (non-test-mode) auth: this previously redirected to /login
+    // unconditionally, so a genuinely signed-in user was bounced back to
+    // login every time they opened this page. Check the real session
+    // instead — from the store first (set by the OAuth callback / dashboard),
+    // falling back to a direct Supabase lookup for a hard refresh.
     let isMounted = true
-
-    // Subscribe BEFORE checking, so we never miss the SIGNED_IN event that
-    // fires once Supabase finishes exchanging the post-OAuth-redirect code
-    // for a real session. This is what getSession() alone can race against.
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, newSession) => {
-      if (!isMounted) return
-
-      if (newSession) {
-        setSession(newSession)
-        setAuthStoreSession(newSession)
-        setStatus("authenticated")
-        setError(null)
-        fetchBlogStats()
-      } else if (event === "SIGNED_OUT") {
-        setSession(null)
-        setAuthStoreSession(null)
-        setStatus("unauthenticated")
+    const resolveRealSession = async () => {
+      const supabase = createBrowserSupabaseClient()
+      let currentSession = authSession
+      if (!currentSession) {
+        const { data } = await supabase.auth.getSession()
+        currentSession = data.session
+        if (currentSession && isMounted) setAuthSession(currentSession)
       }
-      // event with no session that isn't SIGNED_OUT (e.g. INITIAL_SESSION
-      // with nothing yet) is intentionally ignored here — the grace-period
-      // timer below is the only thing allowed to declare "unauthenticated".
-    })
-
-    // Immediate check, in case a session already exists in storage
-    // (e.g. user is returning, not mid-OAuth-redirect).
-    supabase.auth.getSession().then(({ data: { session: existing }, error: sessionError }) => {
       if (!isMounted) return
-      if (sessionError) {
-        setError(sessionError.message)
-        setStatus("error")
+      if (!currentSession) {
+        router.replace("/login")
+        setLoading(false)
         return
       }
-      if (existing) {
-        setSession(existing)
-        setAuthStoreSession(existing)
-        setStatus("authenticated")
-        fetchBlogStats()
+      setSession(currentSession)
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", currentSession.user.id)
+        .single()
+      if (isMounted) {
+        setRealRole(profile?.role ?? "customer")
+        setLoading(false)
       }
-      // If nothing exists yet, stay in "checking" — give the auth event
-      // (fired by the in-flight OAuth code exchange, if any) a chance to land.
-    })
-
-    // Grace period: if nothing has resolved this to authenticated/error
-    // within 3s, there genuinely is no session — redirect to /login.
-    const graceTimer = setTimeout(() => {
-      if (!isMounted) return
-      setStatus((current) => (current === "checking" ? "unauthenticated" : current))
-    }, 3000)
-
+    }
+    resolveRealSession()
     return () => {
       isMounted = false
-      clearTimeout(graceTimer)
-      subscription.unsubscribe()
     }
-  }, [testMode, session?.user?.email, setAuthStoreSession])
+  }, [testMode, router, authSession, setAuthSession])
 
-  // Fetch blog stats from the API
-  const fetchBlogStats = async () => {
-    try {
-      const response = await fetch("/api/blog/posts")
-      const data = await response.json()
-      const posts = data.posts ?? []
-      setBlogStats({
-        total: posts.length,
-        published: posts.length,
-        drafts: 0, // You can add draft status later
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+
+    const validation = postSchema.safeParse(formData)
+    if (!validation.success) {
+      const errors: Record<string, string> = {}
+      validation.error.errors.forEach((error) => {
+        const key = error.path?.[0]
+        if (typeof key === "string") {
+          errors[key] = error.message
+        }
       })
-    } catch (error) {
-      console.error("Failed to fetch blog stats:", error)
+      setFormErrors(errors)
+      return
     }
+
+    setFormErrors({})
+
+    const slug = formData.title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+
+    const newPost = {
+      slug,
+      ...formData,
+      date: new Date().toISOString().split("T")[0],
+      featured: false,
+    }
+    fetch("/api/blog/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newPost),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.post) {
+          setPosts((current) => [data.post, ...current])
+        }
+      })
+    setFormData({
+      title: "",
+      excerpt: "",
+      category: "Revenue Recovery",
+      readTime: "5 min read",
+      content: "",
+    })
+    setShowForm(false)
   }
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.replace("/login")
-    }
-  }, [status, router])
+  const handleDelete = (slug: string) => {
+    fetch(`/api/blog/posts?slug=${encodeURIComponent(slug)}`, { method: "DELETE" })
+      .then(() => setPosts((current) => current.filter((post) => post.slug !== slug)))
+      .catch(() => {})
+  }
 
-  useEffect(() => {
-    if (testMode && session?.user?.email) {
-      const currentEmail = session.user.email
-      const profile = getFakeProfileByEmail(currentEmail)
-      const currentPurchases = getFakePurchases(profile?.id ?? "demo-user-123")
-      const currentProducts = getFakeProducts()
-      setPurchases(currentPurchases)
-      setProducts(currentProducts)
-      if (searchParams.get("purchased")) {
-        setError(null)
-      }
-    }
-  }, [searchParams, session?.user?.email, testMode])
-
-  if (status === "checking") {
+  if (loading) {
     return (
-      <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8">
-        <div className="flex flex-col items-center justify-center space-y-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#635bff] border-t-transparent" />
-          <p className="text-base text-[#3b5a82]">Loading your dashboard...</p>
-        </div>
+      <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8 text-center">
+        <p className="text-base text-[#3b5a82]">Loading...</p>
       </div>
     )
   }
 
-  if (status === "error") {
-    return (
-      <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8">
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-10 text-center">
-          <h2 className="text-2xl font-semibold text-red-700">Authentication Error</h2>
-          <p className="mt-4 text-red-600">{error}</p>
-          <button
-            onClick={() => router.push("/login")}
-            className="mt-6 rounded-full bg-red-600 px-6 py-2 text-white hover:bg-red-700"
-          >
-            Return to Login
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // status is "unauthenticated" (redirect effect above will fire) or
-  // "authenticated" without a session somehow — render nothing either way.
   if (!session) {
-    return null
+    return (
+      <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8 text-center">
+        <p className="text-base text-[#3b5a82]">Not authenticated</p>
+      </div>
+    )
+  }
+
+  const role = testMode ? (getFakeAuthSession()?.role ?? "customer") : (realRole ?? "customer")
+  if (role !== "admin") {
+    return (
+      <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8 text-center">
+        <p className="text-base text-[#3b5a82]">You need an admin account to manage blog posts.</p>
+      </div>
+    )
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8">
-      <div className="rounded-3xl border border-[#d7e5fc] bg-[#f8fbff] p-10 shadow-sm shadow-[#aabcf1]/20">
-        <div className="flex items-start justify-between">
+    <div className="mx-auto max-w-5xl px-6 py-12 lg:px-8">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1.5 text-sm text-[#3b5a82] transition-colors hover:text-[#635bff]"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to dashboard
+      </Link>
+
+      <div className="mt-8">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-[#0a2540]">
-              Welcome back, {session.user?.email || "User"}
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-[#3b5a82]">
-              This is your client dashboard. As we continue building the admin and payments
-              integration, your authenticated session will let you access invoices,
-              subscription status, and service details.
+            <p className="font-mono text-xs uppercase tracking-widest text-[#635bff]">
+              Blog Admin
             </p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#0a2540]">
+              Manage Posts
+            </h1>
           </div>
           <button
-            onClick={async () => {
-              const supabase = createBrowserSupabaseClient()
-              await supabase.auth.signOut()
-              router.push("/login")
-            }}
-            className="rounded-full border border-[#d7e5fc] bg-white px-4 py-2 text-sm text-[#3b5a82] hover:bg-[#f0f5ff]"
+            onClick={() => setShowForm(!showForm)}
+            className="inline-flex items-center gap-2 rounded-full bg-[#635bff] px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
           >
-            Sign Out
+            <Plus className="h-4 w-4" />
+            New Post
           </button>
         </div>
 
-        {testMode && (
-          <div className="mt-4 inline-block rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-800">
-            🧪 Running in test mode with demo credentials
-          </div>
+        {showForm && (
+          <form
+            onSubmit={handleSubmit}
+            className="mt-8 rounded-3xl border border-[#d7e5fc] bg-white p-8 shadow-sm"
+          >
+            <h2 className="text-xl font-semibold text-[#0a2540]">Create New Post</h2>
+
+            <div className="mt-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#0a2540]">Title</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="mt-2 w-full rounded-lg border border-[#d7e5fc] px-4 py-2 text-[#0a2540] placeholder-[#8999b3] focus:border-[#635bff] focus:outline-none"
+                  placeholder="Post title"
+                />
+                {formErrors.title ? (
+                  <p className="mt-2 text-xs text-red-600">{formErrors.title}</p>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#0a2540]">Excerpt</label>
+                <textarea
+                  required
+                  value={formData.excerpt}
+                  onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
+                  className="mt-2 w-full rounded-lg border border-[#d7e5fc] px-4 py-2 text-[#0a2540] placeholder-[#8999b3] focus:border-[#635bff] focus:outline-none"
+                  placeholder="Short summary for listing"
+                  rows={3}
+                />
+                {formErrors.excerpt ? (
+                  <p className="mt-2 text-xs text-red-600">{formErrors.excerpt}</p>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#0a2540]">Category</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="mt-2 w-full rounded-lg border border-[#d7e5fc] px-4 py-2 text-[#0a2540] focus:border-[#635bff] focus:outline-none"
+                  >
+                    <option>Revenue Recovery</option>
+                    <option>Stripe Setup</option>
+                    <option>Dunning</option>
+                    <option>Klaviyo Integration</option>
+                    <option>GHL Integration</option>
+                    <option>Revenue Engineering</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#0a2540]">Read Time</label>
+                  <input
+                    type="text"
+                    value={formData.readTime}
+                    onChange={(e) => setFormData({ ...formData, readTime: e.target.value })}
+                    className="mt-2 w-full rounded-lg border border-[#d7e5fc] px-4 py-2 text-[#0a2540] placeholder-[#8999b3] focus:border-[#635bff] focus:outline-none"
+                    placeholder="e.g. 8 min read"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#0a2540]\">Content</label>
+                <textarea
+                  required
+                  value={formData.content}
+                  onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                  className="mt-2 w-full rounded-lg border border-[#d7e5fc] px-4 py-2 font-mono text-sm text-[#0a2540] placeholder-[#8999b3] focus:border-[#635bff] focus:outline-none"
+                  placeholder="Markdown content. Use ## for headings, **bold**, `code`, etc."
+                  rows={12}
+                />
+                {formErrors.content ? (
+                  <p className="mt-2 text-xs text-red-600">{formErrors.content}</p>
+                ) : null}
+                <p className="mt-2 text-xs text-[#3b5a82]">
+                  Supports Markdown: ## headings, **bold**, `code`, - lists, 1. numbered
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="submit"
+                className="rounded-full bg-[#635bff] px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                Publish
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="rounded-full border border-[#d7e5fc] px-6 py-2.5 text-sm font-semibold text-[#0a2540] transition-colors hover:bg-[#f8fbff]"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         )}
 
-        {/* Blog Stats Cards */}
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-[#3b5a82]">Total Posts</p>
-                <p className="text-3xl font-bold text-[#0a2540]">{blogStats.total}</p>
-              </div>
-              <div className="rounded-full bg-[#e3eaff] p-3">
-                <FileText className="h-6 w-6 text-[#635bff]" />
-              </div>
-            </div>
-          </div>
-          <div className="rounded-2xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-[#3b5a82]">Published</p>
-                <p className="text-3xl font-bold text-[#0a2540]">{blogStats.published}</p>
-              </div>
-              <div className="rounded-full bg-green-50 p-3">
-                <TrendingUp className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-          <div className="rounded-2xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-[#3b5a82]">Drafts</p>
-                <p className="text-3xl font-bold text-[#0a2540]">{blogStats.drafts}</p>
-              </div>
-              <div className="rounded-full bg-yellow-50 p-3">
-                <Users className="h-6 w-6 text-yellow-600" />
-              </div>
-            </div>
-          </div>
-        </div>
+        <div className="mt-10">
+          <h3 className="text-lg font-semibold text-[#0a2540]">
+            {posts.length} Post{posts.length !== 1 ? "s" : ""}
+          </h3>
 
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {/* ✅ FIXED: Changed from /blog/admin to /blog-admin */}
-          <Link
-            href="/blog-admin"
-            className="rounded-3xl border border-[#d7e5fc] bg-white p-6 shadow-sm shadow-[#ccd9ff]/40 transition-all hover:border-[#635bff] hover:shadow-lg group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-[#e3eaff] p-2 group-hover:bg-[#635bff] group-hover:text-white transition-colors">
-                <FileText className="h-5 w-5 text-[#635bff] group-hover:text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-[#0a2540]">Manage Blog</h3>
-                <p className="text-sm text-[#3b5a82]">Create and edit blog posts</p>
-              </div>
+          {posts.length === 0 ? (
+            <div className="mt-6 rounded-2xl bg-[#f8fbff] p-8 text-center">
+              <p className="text-[#3b5a82]">No posts yet. Create one to get started!</p>
             </div>
-          </Link>
-
-          {/* ✅ FIXED: Changed from /blog/admin?action=new to /blog-admin?action=new */}
-          <Link
-            href="/blog-admin?action=new"
-            className="rounded-3xl border border-[#d7e5fc] bg-white p-6 shadow-sm shadow-[#ccd9ff]/40 transition-all hover:border-[#635bff] hover:shadow-lg group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-green-50 p-2 group-hover:bg-[#635bff] group-hover:text-white transition-colors">
-                <PlusCircle className="h-5 w-5 text-green-600 group-hover:text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-[#0a2540]">New Post</h3>
-                <p className="text-sm text-[#3b5a82]">Write a new blog article</p>
-              </div>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {posts.map((post) => (
+                <div
+                  key={post.slug}
+                  className="flex items-start justify-between rounded-2xl border border-[#d7e5fc] bg-white p-6"
+                >
+                  <div className="flex-1">
+                    <Link href={`/blog/${post.slug}`} className="block">
+                      <h4 className="text-lg font-semibold text-[#0a2540] hover:text-[#635bff] transition-colors">
+                        {post.title}
+                      </h4>
+                    </Link>
+                    <p className="mt-1 text-sm text-[#3b5a82]">{post.excerpt}</p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className="inline-block rounded-full bg-[#e3eaff] px-3 py-1 font-mono text-xs text-[#0a2540]">
+                        {post.category}
+                      </span>
+                      <span className="text-xs text-[#3b5a82]">{post.date}</span>
+                      <span className="text-xs text-[#3b5a82]">{post.readTime}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDelete(post.slug)}
+                    className="ml-4 rounded-full p-2 text-[#8999b3] transition-colors hover:bg-red-50 hover:text-red-600"
+                    title="Delete post"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </button>
+                </div>
+              ))}
             </div>
-          </Link>
-
-          <div className="rounded-3xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
-            <h2 className="text-lg font-semibold text-[#0a2540]">Your Profile</h2>
-            <div className="mt-3 space-y-2 text-sm text-[#3b5a82]">
-              <p>
-                <span className="font-medium">Email:</span> {session.user?.email || "Not provided"}
-              </p>
-              <p>
-                <span className="font-medium">User ID:</span> {session.user?.id || "N/A"}
-              </p>
-              <p>
-                <span className="font-medium">Account Created:</span>{" "}
-                {session.user?.created_at
-                  ? new Date(session.user.created_at).toLocaleDateString()
-                  : "N/A"}
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-3xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
-            <h2 className="text-lg font-semibold text-[#0a2540]">Your Purchases</h2>
-            <ul className="mt-3 space-y-3 text-sm leading-6 text-[#3b5a82]">
-              {purchases.length === 0 ? (
-                <li>No purchases yet.</li>
-              ) : (
-                purchases.map((purchase) => {
-                  const product = products.find((item) => item.id === purchase.product_id)
-                  return (
-                    <li key={purchase.id}>
-                      <span className="font-semibold text-[#0a2540]">{product?.name ?? "Purchased item"}</span>
-                      <div className="text-xs text-[#3b5a82]">{purchase.status}</div>
-                    </li>
-                  )
-                })
-              )}
-            </ul>
-          </div>
+          )}
         </div>
       </div>
     </div>
-  )
-}
-
-export default function DashboardPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8">
-          <div className="flex flex-col items-center justify-center space-y-4">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#635bff] border-t-transparent" />
-            <p className="text-base text-[#3b5a82]">Loading your dashboard...</p>
-          </div>
-        </div>
-      }
-    >
-      <DashboardContent />
-    </Suspense>
   )
 }
