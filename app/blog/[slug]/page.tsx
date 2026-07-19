@@ -7,8 +7,11 @@ import { RevenueCTA } from "@/components/revenue-cta"
 import { NewsletterSection } from "@/components/newsletter-section"
 import { getBlogPostBySlug, getBlogSlugs } from "@/lib/sanity"
 
+// ============================================
+// ✅ CHANGE 1: Make params a Promise
+// ============================================
 interface BlogPostPageProps {
-  params: { slug: string }
+  params: Promise<{ slug: string }>  // ← Changed this
 }
 
 export async function generateStaticParams() {
@@ -16,8 +19,12 @@ export async function generateStaticParams() {
   return slugs.map((slug) => ({ slug }))
 }
 
+// ============================================
+// ✅ CHANGE 2: Await params in generateMetadata
+// ============================================
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
-  const post = await getBlogPostBySlug(params.slug)
+  const { slug } = await params  // ← Added this line
+  const post = await getBlogPostBySlug(slug)  // ← Changed from params.slug to slug
   if (!post) return { title: "Post Not Found" }
 
   return {
@@ -159,8 +166,18 @@ function renderMarkdown(content: string) {
   return elements
 }
 
+// ============================================
+// ✅ CHANGE 3: Await params in BlogPostPage
+// ============================================
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
-  const post = await getBlogPostBySlug(params.slug)
+  const { slug } = await params  // ← Added this line
+  
+  // Optional but recommended: Add validation
+  if (!slug) {
+    notFound()
+  }
+  
+  const post = await getBlogPostBySlug(slug)  // ← Changed from params.slug to slug
 
   if (!post) notFound()
 
