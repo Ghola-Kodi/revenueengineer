@@ -54,7 +54,8 @@ export async function getAllBlogPosts(): Promise<BlogPost[]> {
   // 1. PRIMARY: Try Sanity first
   if (sanityClient) {
     try {
-      const query = `*[_type == "post"] | order(publishedAt desc){
+      // ✅ CHANGE: "_type == "blogPost"" (was "post")
+      const query = `*[_type == "blogPost"] | order(publishedAt desc){
         title,
         excerpt,
         category,
@@ -99,7 +100,8 @@ export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> 
   // 1. PRIMARY: Try Sanity first
   if (sanityClient) {
     try {
-      const query = `*[_type == "post" && slug.current == $slug][0]{
+      // ✅ CHANGE: "_type == "blogPost"" (was "post")
+      const query = `*[_type == "blogPost" && slug.current == $slug][0]{
         title,
         excerpt,
         category,
@@ -150,7 +152,8 @@ export async function getBlogSlugs(): Promise<string[]> {
   // 1. PRIMARY: Try Sanity first
   if (sanityClient) {
     try {
-      const query = `*[_type == "post"]{slug}`
+      // ✅ CHANGE: "_type == "blogPost"" (was "post")
+      const query = `*[_type == "blogPost"]{slug}`
       const slugs = await sanityClient.fetch(query)
       
       if (Array.isArray(slugs) && slugs.length > 0) {
