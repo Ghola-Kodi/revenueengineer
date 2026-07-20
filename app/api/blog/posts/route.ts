@@ -13,11 +13,6 @@ const sanityClient = createClient({
   token: process.env.SANITY_API_TOKEN,
 })
 
-// BUG 1 FIX: the public site (lib/sanity.ts) queries `_type == "blogPost"`,
-// matching the actual schema in studio/schemas/blogPost.ts. This route was
-// still reading/writing `_type == "post"`, a type nothing else queries, so
-// posts created here were invisible on /blog and /blog/[slug]. Every query
-// and mutation below now targets "blogPost" consistently.
 const DOC_TYPE = "blogPost"
 
 export async function GET() {
@@ -51,9 +46,6 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  // BUG 4 FIX: this endpoint previously had no auth check at all — anyone
-  // who knew the URL could publish a post. Now it requires a verified
-  // admin session before any write happens.
   const auth = await requireAdmin(request)
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
@@ -129,9 +121,6 @@ export async function POST(request: Request) {
   }
 }
 
-// BUG 3 FIX: there was no update path at all — a published post could only
-// be deleted and recreated. PUT edits a post in place, keyed by its
-// existing slug, so the URL and publish date stay intact.
 export async function PUT(request: Request) {
   const auth = await requireAdmin(request)
   if (!auth.ok) {
@@ -219,48 +208,87 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status })
   }
 
-  if (getTestMode()) {
-    const { searchParams } = new URL(request.url)
-    const slug = searchParams.get("slug")
-    if (!slug) {
-      return NextResponse.json({ error: "Missing slug" }, { status: 400 })
-    }
-    deleteFakePost(slug)
-    return NextResponse.json({ ok: true })
+  const { searchParams } = new URL(request.url)
+  const slug = searchParams.get("slug")
+  if (!slug) {
+    return NextResponse.json({ error: "Missing slug" }, { status: 400 })
   }
 
-  try {
-    const { searchParams } = new URL(request.url)
-    const slug = searchParams.get("slug")
-    if (!slug) {
-      return NextResponse.json({ error: "Missing slug" }, { status: 400 })
+  let deleted = false
+  let deletedFrom = []
+
+  // 1. Try to delete from fake data (if in test mode or as fallback)
+  if (getTestMode()) {
+    try {
+      const fakePosts = getFakePosts()
+      const exists = fakePosts.some(p => p.slug === slug)
+      if (exists) {
+        deleteFakePost(slug)
+        deleted = true
+        deletedFrom.push("fake-data")
+        console.log(`✅ Deleted "${slug}" from fake data`)
+      } else {
+        console.log(`ℹ️ "${slug}" not found in fake data`)
+      }
+    } catch (error) {
+      console.warn("⚠️ Error deleting from fake data:", error)
     }
+  }
 
-    if (!process.env.SANITY_API_TOKEN) {
-      console.error("❌ SANITY_API_TOKEN is missing!")
-      return NextResponse.json(
-        { error: "SANITY_API_TOKEN is not configured" },
-        { status: 500 }
-      )
+  // 2. Always try Sanity if token is available (even in test mode)
+  if (!deleted || getTestMode()) {
+    try {
+      if (!process.env.SANITY_API_TOKEN) {
+        console.warn("ℹ️ SANITY_API_TOKEN not configured, skipping Sanity delete")
+      } else {
+        const query = `*[_type == "${DOC_TYPE}" && slug.current == $slug][0]._id`
+        const id = await sanityClient.fetch(query, { slug })
+
+        if (id) {
+          await sanityClient.delete(id)
+          deleted = true
+          deletedFrom.push("sanity")
+          console.log(`✅ Deleted "${slug}" from Sanity`)
+        } else {
+          console.log(`ℹ️ "${slug}" not found in Sanity`)
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error deleting from Sanity:", error)
     }
+  }
 
-    const query = `*[_type == "${DOC_TYPE}" && slug.current == $slug][0]._id`
-    const id = await sanityClient.fetch(query, { slug })
-
-    if (!id) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 })
+  // 3. If still not deleted, try fake data one more time (fallback)
+  if (!deleted) {
+    try {
+      // Check if it exists in fake data even if not in test mode
+      const fakePosts = getFakePosts()
+      const exists = fakePosts.some(p => p.slug === slug)
+      if (exists) {
+        deleteFakePost(slug)
+        deleted = true
+        deletedFrom.push("fake-data-fallback")
+        console.log(`✅ Deleted "${slug}" from fake data (fallback)`)
+      }
+    } catch (error) {
+      console.warn("⚠️ Error deleting from fake data (fallback):", error)
     }
+  }
 
-    await sanityClient.delete(id)
-    return NextResponse.json({ ok: true })
-  } catch (error) {
-    console.error("❌ Error deleting post:", error)
+  if (!deleted) {
+    console.log(`❌ Post "${slug}" not found in any data source`)
     return NextResponse.json(
-      {
-        error: "Failed to delete post",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 }
+      { 
+        error: "Post not found",
+        details: "The post was not found in Sanity or fake data"
+      }, 
+      { status: 404 }
     )
   }
+
+  return NextResponse.json({ 
+    ok: true,
+    deletedFrom: deletedFrom,
+    message: `Post "${slug}" deleted from: ${deletedFrom.join(", ")}`
+  })
 }
