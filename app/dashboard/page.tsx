@@ -257,35 +257,35 @@ function DashboardContent() {
         </div>
 
         <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <Link
-            href="/blog/admin"
-            className="rounded-3xl border border-[#d7e5fc] bg-white p-6 shadow-sm shadow-[#ccd9ff]/40 transition-all hover:border-[#635bff] hover:shadow-lg group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-[#e3eaff] p-2 group-hover:bg-[#635bff] group-hover:text-white transition-colors">
-                <FileText className="h-5 w-5 text-[#635bff] group-hover:text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-[#0a2540]">Manage Blog</h3>
-                <p className="text-sm text-[#3b5a82]">Create and edit blog posts</p>
-              </div>
-            </div>
-          </Link>
+       <Link
+  href="/blog-admin"
+  className="rounded-3xl border border-[#d7e5fc] bg-white p-6 shadow-sm shadow-[#ccd9ff]/40 transition-all hover:border-[#635bff] hover:shadow-lg group"
+>
+  <div className="flex items-center gap-3">
+    <div className="rounded-full bg-[#e3eaff] p-2 group-hover:bg-[#635bff] group-hover:text-white transition-colors">
+      <FileText className="h-5 w-5 text-[#635bff] group-hover:text-white" />
+    </div>
+    <div>
+      <h3 className="text-lg font-semibold text-[#0a2540]">Manage Blog</h3>
+      <p className="text-sm text-[#3b5a82]">Create and edit blog posts</p>
+    </div>
+  </div>
+</Link>
 
-          <Link
-            href="/blog/admin?action=new"
-            className="rounded-3xl border border-[#d7e5fc] bg-white p-6 shadow-sm shadow-[#ccd9ff]/40 transition-all hover:border-[#635bff] hover:shadow-lg group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-green-50 p-2 group-hover:bg-[#635bff] group-hover:text-white transition-colors">
-                <PlusCircle className="h-5 w-5 text-green-600 group-hover:text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-[#0a2540]">New Post</h3>
-                <p className="text-sm text-[#3b5a82]">Write a new blog article</p>
-              </div>
-            </div>
-          </Link>
+<Link
+  href="/blog-admin?action=new"
+  className="rounded-3xl border border-[#d7e5fc] bg-white p-6 shadow-sm shadow-[#ccd9ff]/40 transition-all hover:border-[#635bff] hover:shadow-lg group"
+>
+  <div className="flex items-center gap-3">
+    <div className="rounded-full bg-green-50 p-2 group-hover:bg-[#635bff] group-hover:text-white transition-colors">
+      <PlusCircle className="h-5 w-5 text-green-600 group-hover:text-white" />
+    </div>
+    <div>
+      <h3 className="text-lg font-semibold text-[#0a2540]">New Post</h3>
+      <p className="text-sm text-[#3b5a82]">Write a new blog article</p>
+    </div>
+  </div>
+</Link>
 
           <div className="rounded-3xl bg-white p-6 shadow-sm shadow-[#ccd9ff]/40">
             <h2 className="text-lg font-semibold text-[#0a2540]">Your Profile</h2>
