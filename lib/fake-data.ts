@@ -224,6 +224,17 @@ export function saveFakePost(post: FakePost) {
   return post
 }
 
+export function updateFakePost(slug: string, updates: Partial<FakePost>) {
+  const existing = getFakePosts()
+  const index = existing.findIndex((item) => item.slug === slug)
+  if (index === -1) return null
+  const updated: FakePost = { ...existing[index], ...updates, slug }
+  const next = [...existing]
+  next[index] = updated
+  writeJson(STORAGE_KEYS.posts, next)
+  return updated
+}
+
 export function deleteFakePost(slug: string) {
   const next = getFakePosts().filter((item) => item.slug !== slug)
   writeJson(STORAGE_KEYS.posts, next)
