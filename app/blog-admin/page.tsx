@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { z } from "zod"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useTestMode, getTestSession } from "@/lib/test-auth"
 import { useAuthStore } from "@/lib/auth-store"
 import { createBrowserSupabaseClient } from "@/lib/supabase-client"
@@ -29,6 +29,7 @@ const emptyForm = {
 
 export default function BlogAdminPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const testMode = useTestMode()
   const [session, setSession] = useState<any>(null)
   const [realRole, setRealRole] = useState<string | null>(null)
@@ -130,6 +131,16 @@ export default function BlogAdminPage() {
     resetForm()
     setShowForm(true)
   }
+
+  // Dashboard's "New Post" card links here with ?action=new so it lands
+  // straight on the create form instead of just the manage list.
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      startCreate()
+      router.replace("/blog-admin")
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   const startEdit = (post: any) => {
     setEditingSlug(post.slug)
