@@ -1,6 +1,4 @@
 import { createClient } from "@sanity/client"
-import { blogPosts } from "./blog-data"
-import { demoPostsData } from "./demo-posts"
 import type { BlogPost } from "./types"
 
 // Use webhookengineer as default dataset
