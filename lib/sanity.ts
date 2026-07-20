@@ -1,6 +1,4 @@
 import { createClient } from "@sanity/client"
-import { blogPosts } from "./blog-data"
-import { getTestMode } from "./test-auth"
 import type { BlogPost } from "./types"
 
 // Use webhookengineer as default dataset
@@ -19,6 +17,13 @@ const sanityClient = projectId && projectId !== "" && projectId !== "your_projec
     })
   : null
 
+// Log connection status
+if (!sanityClient) {
+  console.error("❌ Sanity client not initialized. Check NEXT_PUBLIC_SANITY_PROJECT_ID")
+} else {
+  console.log(`✅ Sanity client initialized: projectId=${projectId}, dataset=${dataset}`)
+}
+
 function normalizePost(post: any): BlogPost {
   return {
     slug: post.slug?.current ?? post.slug ?? "",
@@ -33,26 +38,12 @@ function normalizePost(post: any): BlogPost {
 }
 
 export async function getAllBlogPosts(): Promise<BlogPost[]> {
-  // BUG 5 FIX: this used to fall back to `localStorage.getItem("demo_posts")`,
-  // a key nothing in the app ever wrote to — so posts created via
-  // /blog-admin in test mode never showed up here, they'd silently fall
-  // through to the static demo/blog-data arrays instead. Test mode now
-  // reads directly from the same fake-data store the admin API
-  // (app/api/blog/posts) reads and writes, so create/edit/delete in the
-  // admin panel are immediately reflected on /blog.
-  if (getTestMode()) {
-    const fakePosts = getFakePosts()
-    if (fakePosts.length > 0) {
-      return fakePosts.map(normalizePost)
-    }
-    // Test mode with no fake posts yet still gets *something* to look at.
-    return demoPostsData.length > 0 ? demoPostsData : blogPosts
-  }
-
-  // PRIMARY: Sanity
+  console.log("🔍 Fetching all blog posts from Sanity...")
+  
+  // PRIMARY: Sanity only - no test mode, no fallbacks
   if (sanityClient) {
     try {
-      const query = `*[_type == "blogPost"] | order(publishedAt desc){
+      const query = `*[_type == "post"] | order(publishedAt desc){
         title,
         excerpt,
         category,
@@ -71,37 +62,24 @@ export async function getAllBlogPosts(): Promise<BlogPost[]> {
       }
 
       console.log("ℹ️ No posts found in Sanity")
+      return []
     } catch (error) {
-      console.warn("❌ Sanity fetch failed:", error)
+      console.error("❌ Error fetching posts from Sanity:", error)
+      return []
     }
   }
 
-  // FALLBACK: static demo data, then the hardcoded array
-  if (demoPostsData && demoPostsData.length > 0) {
-    console.log(`📄 Using ${demoPostsData.length} demo posts`)
-    return demoPostsData
-  }
-
-  console.log("📄 Using static blog posts")
-  return blogPosts
+  console.error("❌ Sanity client not available")
+  return []
 }
 
 export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> {
-  if (getTestMode()) {
-    const fakePosts = getFakePosts()
-    const found = fakePosts.find((p) => p.slug === slug)
-    if (found) return normalizePost(found)
-
-    const demoFound = demoPostsData.find((p) => p.slug === slug)
-    if (demoFound) return demoFound
-
-    return blogPosts.find((post) => post.slug === slug) ?? null
-  }
-
-  // PRIMARY: Sanity
+  console.log(`🔍 Fetching post "${slug}" from Sanity...`)
+  
+  // PRIMARY: Sanity only - no test mode, no fallbacks
   if (sanityClient) {
     try {
-      const query = `*[_type == "blogPost" && slug.current == $slug][0]{
+      const query = `*[_type == "post" && slug.current == $slug][0]{
         title,
         excerpt,
         category,
@@ -120,35 +98,24 @@ export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> 
       }
 
       console.log(`ℹ️ Post "${slug}" not found in Sanity`)
+      return null
     } catch (error) {
-      console.warn(`❌ Sanity fetch failed for "${slug}":`, error)
+      console.error(`❌ Error fetching post "${slug}":`, error)
+      return null
     }
   }
 
-  // FALLBACK: static demo data, then the hardcoded array
-  const demoFound = demoPostsData.find((p) => p.slug === slug)
-  if (demoFound) {
-    console.log(`📄 Found "${slug}" in demo posts`)
-    return demoFound
-  }
-
-  console.log(`❌ Post "${slug}" not found anywhere`)
-  return blogPosts.find((post) => post.slug === slug) ?? null
+  console.error("❌ Sanity client not available")
+  return null
 }
 
 export async function getBlogSlugs(): Promise<string[]> {
-  if (getTestMode()) {
-    const fakePosts = getFakePosts()
-    if (fakePosts.length > 0) {
-      return fakePosts.map((p) => p.slug).filter(Boolean)
-    }
-    return (demoPostsData.length > 0 ? demoPostsData : blogPosts).map((p) => p.slug)
-  }
-
-  // PRIMARY: Sanity
+  console.log("🔍 Fetching all slugs from Sanity...")
+  
+  // PRIMARY: Sanity only - no test mode, no fallbacks
   if (sanityClient) {
     try {
-      const query = `*[_type == "blogPost"]{slug}`
+      const query = `*[_type == "post"]{slug}`
       const slugs = await sanityClient.fetch(query)
 
       if (Array.isArray(slugs) && slugs.length > 0) {
@@ -160,17 +127,13 @@ export async function getBlogSlugs(): Promise<string[]> {
       }
 
       console.log("ℹ️ No slugs found in Sanity")
+      return []
     } catch (error) {
-      console.warn("❌ Sanity fetch failed for slugs:", error)
+      console.error("❌ Error fetching slugs:", error)
+      return []
     }
   }
 
-  // FALLBACK: static demo data, then the hardcoded array
-  if (demoPostsData && demoPostsData.length > 0) {
-    console.log(`📄 Using ${demoPostsData.length} slugs from demo posts`)
-    return demoPostsData.map((p) => p.slug)
-  }
-
-  console.log(`📄 Using ${blogPosts.length} slugs from static posts`)
-  return blogPosts.map((post) => post.slug)
+  console.error("❌ Sanity client not available")
+  return []
 }
