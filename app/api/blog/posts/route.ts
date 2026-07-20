@@ -15,6 +15,20 @@ const sanityClient = createClient({
 
 const DOC_TYPE = "blogPost"
 
+// ✅ Add normalize function
+function normalizePost(post: any): any {
+  return {
+    slug: post.slug?.current ?? post.slug ?? "",
+    title: post.title ?? "Untitled",
+    excerpt: post.excerpt ?? "",
+    category: post.category ?? "Uncategorized",
+    date: post.publishedAt ?? post.date ?? new Date().toISOString(),
+    readTime: post.readTime ?? "5 min read",
+    featured: post.featured ?? false,
+    content: post.content ?? "",
+  }
+}
+
 export async function GET() {
   if (getTestMode()) {
     return NextResponse.json({ posts: getFakePosts() })
@@ -32,7 +46,11 @@ export async function GET() {
       content
     }`
     const posts = await sanityClient.fetch(query)
-    return NextResponse.json({ posts })
+    
+    // ✅ FIX: Normalize posts before returning
+    const normalizedPosts = posts.map(normalizePost)
+    
+    return NextResponse.json({ posts: normalizedPosts })
   } catch (error) {
     console.error("Error fetching posts:", error)
     return NextResponse.json(
@@ -94,18 +112,10 @@ export async function POST(request: Request) {
 
     console.log("✅ Post created successfully:", result._id)
 
+    // ✅ FIX: Return normalized post
     return NextResponse.json(
       {
-        post: {
-          slug: result.slug.current,
-          title: result.title,
-          excerpt: result.excerpt,
-          category: result.category,
-          date: result.publishedAt,
-          readTime: result.readTime,
-          featured: result.featured,
-          content: result.content,
-        },
+        post: normalizePost(result),
       },
       { status: 201 }
     )
@@ -178,9 +188,10 @@ export async function PUT(request: Request) {
       })
       .commit()
 
+    // ✅ FIX: Return normalized post
     return NextResponse.json({
       post: {
-        slug,
+        slug: slug,
         title: result.title,
         excerpt: result.excerpt,
         category: result.category,
@@ -261,7 +272,6 @@ export async function DELETE(request: Request) {
   // 3. If still not deleted, try fake data one more time (fallback)
   if (!deleted) {
     try {
-      // Check if it exists in fake data even if not in test mode
       const fakePosts = getFakePosts()
       const exists = fakePosts.some(p => p.slug === slug)
       if (exists) {
