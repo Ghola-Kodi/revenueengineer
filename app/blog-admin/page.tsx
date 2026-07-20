@@ -149,7 +149,15 @@ function BlogAdminContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
-  const startEdit = (post: any) => {
+  // ✅ FIXED: Now accepts a slug string and finds the post
+  const startEdit = (slug: string) => {
+    // Find the post by slug
+    const post = posts.find(p => p.slug === slug)
+    if (!post) {
+      setActionError("Post not found")
+      return
+    }
+    
     setEditingSlug(post.slug)
     setFormData({
       title: post.title ?? "",
@@ -465,13 +473,15 @@ function BlogAdminContent() {
                     </div>
                   </div>
                   <div className="ml-4 flex items-center gap-1">
+                    {/* ✅ FIXED: Pass post.slug, not post */}
                     <button
-                      onClick={() => startEdit(post)}
+                      onClick={() => startEdit(post.slug)}
                       className="rounded-full p-2 text-[#8999b3] transition-colors hover:bg-[#eef2ff] hover:text-[#635bff]"
                       title="Edit post"
                     >
                       <Pencil className="h-5 w-5" />
                     </button>
+                    {/* ✅ This was already correct */}
                     <button
                       onClick={() => handleDelete(post.slug)}
                       className="rounded-full p-2 text-[#8999b3] transition-colors hover:bg-red-50 hover:text-red-600"
