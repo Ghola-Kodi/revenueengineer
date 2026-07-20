@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { z } from "zod"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useTestMode, getTestSession } from "@/lib/test-auth"
@@ -27,7 +27,14 @@ const emptyForm = {
   featured: false,
 }
 
-export default function BlogAdminPage() {
+// Next.js requires any component calling useSearchParams() to be wrapped
+// in a Suspense boundary, or static prerendering fails the build (this is
+// what broke the Vercel build: "useSearchParams() should be wrapped in a
+// suspense boundary"). The actual page component below reads
+// useSearchParams() to support the dashboard's ?action=new link, so the
+// default export just wraps it in Suspense instead of exporting it
+// directly.
+function BlogAdminContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const testMode = useTestMode()
@@ -480,5 +487,19 @@ export default function BlogAdminPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function BlogAdminPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-5xl px-6 py-24 lg:px-8 text-center">
+          <p className="text-base text-[#3b5a82]">Loading...</p>
+        </div>
+      }
+    >
+      <BlogAdminContent />
+    </Suspense>
   )
 }
