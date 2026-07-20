@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { useTestMode, getTestSession } from "@/lib/test-auth"
 import { useAuthStore } from "@/lib/auth-store"
 import { createBrowserSupabaseClient } from "@/lib/supabase-client"
-import { ArrowLeft, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Pencil } from "lucide-react"
 import Link from "next/link"
 import { getFakeAuthSession } from "@/lib/fake-data"
 
@@ -18,6 +18,15 @@ const postSchema = z.object({
   content: z.string().min(50, "Content must be at least 50 characters"),
 })
 
+const emptyForm = {
+  title: "",
+  excerpt: "",
+  category: "Revenue Recovery",
+  readTime: "5 min read",
+  content: "",
+  featured: false,
+}
+
 export default function BlogAdminPage() {
   const router = useRouter()
   const testMode = useTestMode()
@@ -26,14 +35,13 @@ export default function BlogAdminPage() {
   const [loading, setLoading] = useState(true)
   const [posts, setPosts] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({
-    title: "",
-    excerpt: "",
-    category: "Revenue Recovery",
-    readTime: "5 min read",
-    content: "",
-  })
+  // BUG 3 FIX: editingSlug tracks whether the form is creating a new post
+  // (null) or editing an existing one (the post's slug). The slug never
+  // changes on edit, so the post's URL and publish date stay stable.
+  const [editingSlug, setEditingSlug] = useState<string | null>(null)
+  const [formData, setFormData] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const authSession = useAuthStore((state) => state.session)
   const setAuthSession = useAuthStore((state) => state.setSession)
@@ -59,11 +67,6 @@ export default function BlogAdminPage() {
       return
     }
 
-    // Real (non-test-mode) auth: this previously redirected to /login
-    // unconditionally, so a genuinely signed-in user was bounced back to
-    // login every time they opened this page. Check the real session
-    // instead — from the store first (set by the OAuth callback / dashboard),
-    // falling back to a direct Supabase lookup for a hard refresh.
     let isMounted = true
     const resolveRealSession = async () => {
       const supabase = createBrowserSupabaseClient()
@@ -90,6 +93,11 @@ export default function BlogAdminPage() {
         setRealRole(profile?.role ?? "customer")
         setLoading(false)
       }
+
+      fetch("/api/blog/posts")
+        .then((response) => response.json())
+        .then((data) => setPosts(data.posts ?? []))
+        .catch(() => setPosts([]))
     }
     resolveRealSession()
     return () => {
@@ -97,8 +105,50 @@ export default function BlogAdminPage() {
     }
   }, [testMode, router, authSession, setAuthSession])
 
+  // BUG 4 FIX: the API route now verifies admin status server-side, so
+  // every write needs to identify the caller. Test mode has no real
+  // credential to send (see lib/api-auth.ts for why that's a separate,
+  // demo-only path), so it sends the fake session's user id; production
+  // sends the real Supabase access token, which the server verifies
+  // against Supabase itself rather than trusting the header contents.
+  const authHeaders = (): Record<string, string> => {
+    if (testMode) {
+      const fakeSession = getFakeAuthSession()
+      return fakeSession ? { "x-test-user-id": fakeSession.id } : {}
+    }
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+  }
+
+  const resetForm = () => {
+    setFormData(emptyForm)
+    setFormErrors({})
+    setEditingSlug(null)
+    setShowForm(false)
+  }
+
+  const startCreate = () => {
+    resetForm()
+    setShowForm(true)
+  }
+
+  const startEdit = (post: any) => {
+    setEditingSlug(post.slug)
+    setFormData({
+      title: post.title ?? "",
+      excerpt: post.excerpt ?? "",
+      category: post.category ?? "Revenue Recovery",
+      readTime: post.readTime ?? "5 min read",
+      content: post.content ?? "",
+      featured: post.featured ?? false,
+    })
+    setFormErrors({})
+    setActionError(null)
+    setShowForm(true)
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setActionError(null)
 
     const validation = postSchema.safeParse(formData)
     if (!validation.success) {
@@ -115,6 +165,28 @@ export default function BlogAdminPage() {
 
     setFormErrors({})
 
+    if (editingSlug) {
+      // Update existing post in place.
+      fetch(`/api/blog/posts?slug=${encodeURIComponent(editingSlug)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(formData),
+      })
+        .then(async (response) => {
+          const data = await response.json()
+          if (!response.ok) {
+            setActionError(data.error ?? "Failed to update post")
+            return
+          }
+          setPosts((current) =>
+            current.map((post) => (post.slug === editingSlug ? { ...post, ...data.post, slug: editingSlug } : post))
+          )
+          resetForm()
+        })
+        .catch(() => setActionError("Failed to update post"))
+      return
+    }
+
     const slug = formData.title
       .trim()
       .toLowerCase()
@@ -125,33 +197,41 @@ export default function BlogAdminPage() {
       slug,
       ...formData,
       date: new Date().toISOString().split("T")[0],
-      featured: false,
     }
     fetch("/api/blog/posts", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(newPost),
     })
-      .then((response) => response.json())
-      .then((data) => {
+      .then(async (response) => {
+        const data = await response.json()
+        if (!response.ok) {
+          setActionError(data.error ?? "Failed to create post")
+          return
+        }
         if (data.post) {
           setPosts((current) => [data.post, ...current])
         }
+        resetForm()
       })
-    setFormData({
-      title: "",
-      excerpt: "",
-      category: "Revenue Recovery",
-      readTime: "5 min read",
-      content: "",
-    })
-    setShowForm(false)
+      .catch(() => setActionError("Failed to create post"))
   }
 
   const handleDelete = (slug: string) => {
-    fetch(`/api/blog/posts?slug=${encodeURIComponent(slug)}`, { method: "DELETE" })
-      .then(() => setPosts((current) => current.filter((post) => post.slug !== slug)))
-      .catch(() => {})
+    setActionError(null)
+    fetch(`/api/blog/posts?slug=${encodeURIComponent(slug)}`, {
+      method: "DELETE",
+      headers: { ...authHeaders() },
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          setActionError(data.error ?? "Failed to delete post")
+          return
+        }
+        setPosts((current) => current.filter((post) => post.slug !== slug))
+      })
+      .catch(() => setActionError("Failed to delete post"))
   }
 
   if (loading) {
@@ -200,7 +280,7 @@ export default function BlogAdminPage() {
             </h1>
           </div>
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => (showForm ? resetForm() : startCreate())}
             className="inline-flex items-center gap-2 rounded-full bg-[#635bff] px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
@@ -208,12 +288,20 @@ export default function BlogAdminPage() {
           </button>
         </div>
 
+        {actionError && (
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {actionError}
+          </div>
+        )}
+
         {showForm && (
           <form
             onSubmit={handleSubmit}
             className="mt-8 rounded-3xl border border-[#d7e5fc] bg-white p-8 shadow-sm"
           >
-            <h2 className="text-xl font-semibold text-[#0a2540]">Create New Post</h2>
+            <h2 className="text-xl font-semibold text-[#0a2540]">
+              {editingSlug ? "Edit Post" : "Create New Post"}
+            </h2>
 
             <div className="mt-6 space-y-4">
               <div>
@@ -275,7 +363,7 @@ export default function BlogAdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[#0a2540]\">Content</label>
+                <label className="block text-sm font-medium text-[#0a2540]">Content</label>
                 <textarea
                   required
                   value={formData.content}
@@ -291,6 +379,19 @@ export default function BlogAdminPage() {
                   Supports Markdown: ## headings, **bold**, `code`, - lists, 1. numbered
                 </p>
               </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="featured"
+                  checked={formData.featured}
+                  onChange={(e) => setFormData({ ...formData, featured: e.target.checked })}
+                  className="h-4 w-4 rounded border-[#d7e5fc]"
+                />
+                <label htmlFor="featured" className="text-sm font-medium text-[#0a2540]">
+                  Feature on homepage
+                </label>
+              </div>
             </div>
 
             <div className="mt-6 flex gap-3">
@@ -298,11 +399,11 @@ export default function BlogAdminPage() {
                 type="submit"
                 className="rounded-full bg-[#635bff] px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
               >
-                Publish
+                {editingSlug ? "Save Changes" : "Publish"}
               </button>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={resetForm}
                 className="rounded-full border border-[#d7e5fc] px-6 py-2.5 text-sm font-semibold text-[#0a2540] transition-colors hover:bg-[#f8fbff]"
               >
                 Cancel
@@ -340,15 +441,27 @@ export default function BlogAdminPage() {
                       </span>
                       <span className="text-xs text-[#3b5a82]">{post.date}</span>
                       <span className="text-xs text-[#3b5a82]">{post.readTime}</span>
+                      {post.featured && (
+                        <span className="text-xs font-semibold text-[#635bff]">Featured</span>
+                      )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDelete(post.slug)}
-                    className="ml-4 rounded-full p-2 text-[#8999b3] transition-colors hover:bg-red-50 hover:text-red-600"
-                    title="Delete post"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
+                  <div className="ml-4 flex items-center gap-1">
+                    <button
+                      onClick={() => startEdit(post)}
+                      className="rounded-full p-2 text-[#8999b3] transition-colors hover:bg-[#eef2ff] hover:text-[#635bff]"
+                      title="Edit post"
+                    >
+                      <Pencil className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(post.slug)}
+                      className="rounded-full p-2 text-[#8999b3] transition-colors hover:bg-red-50 hover:text-red-600"
+                      title="Delete post"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
