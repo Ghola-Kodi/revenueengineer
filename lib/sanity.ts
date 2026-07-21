@@ -4,7 +4,7 @@ import type { BlogPost } from "./types"
 // Use webhookengineer as default dataset
 const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? "webhookengineer"
 const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
-const useCdn = process.env.NODE_ENV === "production"
+const useCdn = process.env.NODE_ENV === "false"
 
 // Initialize Sanity client only if we have a valid project ID
 const sanityClient = projectId && projectId !== "" && projectId !== "your_project_id"
