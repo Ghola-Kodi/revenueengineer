@@ -14,6 +14,7 @@ const tiers = [
     description:
       "Comprehensive analysis of your Stripe configuration, webhook architecture, and dunning gaps. Delivered as a prioritized action plan.",
     popular: false,
+    stripePriceId: "price_stripe_audit", // Replace with your actual Stripe Price ID
     features: [
       "Full webhook event analysis",
       "Dunning gap identification",
@@ -32,6 +33,7 @@ const tiers = [
     description:
       "Full dunning system build: Stripe retry configuration, multi-channel recovery flows, webhook architecture, and Klaviyo/GHL integration.",
     popular: true,
+    stripePriceId: "price_dunning_engine", // Replace with your actual Stripe Price ID
     features: [
       "Everything in Stripe Audit",
       "Smart retry schedule configuration",
@@ -52,6 +54,7 @@ const tiers = [
     description:
       "Ongoing optimization of your revenue recovery system. Monthly analysis, A/B testing, and continuous improvement of recovery rates.",
     popular: false,
+    stripePriceId: "price_retention_retainer", // Replace with your actual Stripe Price ID
     features: [
       "Monthly recovery rate analysis",
       "Dunning email A/B testing",
@@ -69,6 +72,7 @@ const tiers = [
 export default function PricingPage() {
   const testMode = useTestMode()
   const [products, setProducts] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState<string | null>(null)
 
   useEffect(() => {
     if (!testMode) return
@@ -78,15 +82,59 @@ export default function PricingPage() {
       .catch(() => setProducts([]))
   }, [testMode])
 
-  const handleBuy = async (productId: string) => {
-    if (!testMode) return
-    const response = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productId }),
-    })
-    const data = await response.json()
-    window.location.href = data.checkoutUrl ?? "/dashboard"
+  // ✅ Updated: Handle checkout for both test mode and real Stripe
+  const handleCheckout = async (priceId: string, tierName: string) => {
+    setIsLoading(tierName)
+
+    try {
+      // If in test mode, use the test checkout endpoint
+      if (testMode) {
+        const response = await fetch("/api/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            priceId,
+            mode: "test"
+          }),
+        })
+        const data = await response.json()
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl
+        } else {
+          console.error("No checkout URL returned")
+        }
+        return
+      }
+
+      // ✅ NEW: Real Stripe checkout
+      const response = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          priceId,
+          successUrl: `${window.location.origin}/dashboard?checkout=success`,
+          cancelUrl: `${window.location.origin}/pricing?checkout=canceled`,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create checkout session")
+      }
+
+      // Redirect to Stripe Checkout
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+      } else {
+        throw new Error("No checkout URL returned")
+      }
+    } catch (error) {
+      console.error("Checkout error:", error)
+      alert("Something went wrong. Please try again.")
+    } finally {
+      setIsLoading(null)
+    }
   }
 
   return (
@@ -160,17 +208,18 @@ export default function PricingPage() {
                 </ul>
 
                 <div className="mt-8">
-                  <Link
-                    href="/about"
-                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90 ${
+                  <button
+                    onClick={() => handleCheckout(tier.stripePriceId, tier.name)}
+                    disabled={isLoading === tier.name}
+                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50 ${
                       tier.popular
                         ? "bg-[#635bff] text-white shadow-lg shadow-[#635bff]/25"
                         : "border border-[#b9cef0] bg-[#f5faff] text-[#0a2540]"
                     }`}
                   >
-                    {tier.cta}
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                    {isLoading === tier.name ? "Processing..." : tier.cta}
+                    {isLoading !== tier.name && <ArrowRight className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
             </div>
@@ -198,11 +247,15 @@ export default function PricingPage() {
                 <p className="mt-3 flex-1 text-sm leading-relaxed text-[#3b5a82]">{product.description}</p>
                 <button
                   type="button"
-                  onClick={() => handleBuy(product.id)}
-                  className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#635bff] transition-opacity hover:opacity-80"
+                  onClick={() => handleCheckout(product.stripe_price_id, product.name)}
+                  disabled={isLoading === product.name}
+                  className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#635bff] transition-opacity hover:opacity-80 disabled:opacity-50"
                 >
-                  {product.price_cents === 0 ? "Download Now" : "Buy"}
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  {isLoading === product.name 
+                    ? "Processing..." 
+                    : product.price_cents === 0 ? "Download Now" : "Buy"
+                  }
+                  {isLoading !== product.name && <ArrowRight className="h-3.5 w-3.5" />}
                 </button>
               </div>
             ))}
