@@ -7,6 +7,9 @@ import { RevenueCTA } from "@/components/revenue-cta"
 import { NewsletterSection } from "@/components/newsletter-section"
 import { getBlogPostBySlug, getBlogSlugs } from "@/lib/sanity"
 
+// ✅ ADD THIS - Force dynamic rendering to prevent stale caching
+export const dynamic = "force-dynamic"
+
 // ============================================
 // ✅ CHANGE 1: Make params a Promise
 // ============================================
