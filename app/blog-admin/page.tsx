@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useTestMode, getTestSession } from "@/lib/test-auth"
 import { useAuthStore } from "@/lib/auth-store"
 import { createBrowserSupabaseClient } from "@/lib/supabase-client"
-import { ArrowLeft, Plus, Trash2, Pencil } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Pencil, X } from "lucide-react"
 import Link from "next/link"
 import { getFakeAuthSession } from "@/lib/fake-data"
 
@@ -50,6 +50,17 @@ function BlogAdminContent() {
   const [formData, setFormData] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [actionError, setActionError] = useState<string | null>(null)
+
+  // ✅ NEW: Delete confirmation state
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean
+    slug: string | null
+    title: string | null
+  }>({
+    isOpen: false,
+    slug: null,
+    title: null,
+  })
 
   const authSession = useAuthStore((state) => state.session)
   const setAuthSession = useAuthStore((state) => state.setSession)
@@ -243,9 +254,21 @@ function BlogAdminContent() {
       .catch(() => setActionError("Failed to create post"))
   }
 
-  const handleDelete = (slug: string) => {
+  // ✅ NEW: Open delete confirmation dialog
+  const confirmDelete = (slug: string, title: string) => {
+    setDeleteDialog({
+      isOpen: true,
+      slug,
+      title,
+    })
+  }
+
+  // ✅ NEW: Execute delete after confirmation
+  const executeDelete = () => {
+    if (!deleteDialog.slug) return
+
     setActionError(null)
-    fetch(`/api/blog/posts?slug=${encodeURIComponent(slug)}`, {
+    fetch(`/api/blog/posts?slug=${encodeURIComponent(deleteDialog.slug)}`, {
       method: "DELETE",
       headers: { ...authHeaders() },
     })
@@ -255,9 +278,16 @@ function BlogAdminContent() {
           setActionError(data.error ?? "Failed to delete post")
           return
         }
-        setPosts((current) => current.filter((post) => post.slug !== slug))
+        setPosts((current) => current.filter((post) => post.slug !== deleteDialog.slug))
+        // Close the dialog
+        setDeleteDialog({ isOpen: false, slug: null, title: null })
       })
       .catch(() => setActionError("Failed to delete post"))
+  }
+
+  // ✅ NEW: Close delete dialog
+  const closeDeleteDialog = () => {
+    setDeleteDialog({ isOpen: false, slug: null, title: null })
   }
 
   if (loading) {
@@ -473,7 +503,6 @@ function BlogAdminContent() {
                     </div>
                   </div>
                   <div className="ml-4 flex items-center gap-1">
-                    {/* ✅ FIXED: Pass post.slug, not post */}
                     <button
                       onClick={() => startEdit(post.slug)}
                       className="rounded-full p-2 text-[#8999b3] transition-colors hover:bg-[#eef2ff] hover:text-[#635bff]"
@@ -481,9 +510,9 @@ function BlogAdminContent() {
                     >
                       <Pencil className="h-5 w-5" />
                     </button>
-                    {/* ✅ This was already correct */}
+                    {/* ✅ NEW: Open confirmation dialog instead of deleting immediately */}
                     <button
-                      onClick={() => handleDelete(post.slug)}
+                      onClick={() => confirmDelete(post.slug, post.title)}
                       className="rounded-full p-2 text-[#8999b3] transition-colors hover:bg-red-50 hover:text-red-600"
                       title="Delete post"
                     >
@@ -496,6 +525,50 @@ function BlogAdminContent() {
           )}
         </div>
       </div>
+
+      {/* ✅ NEW: Delete Confirmation Dialog */}
+      {deleteDialog.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            {/* Close button */}
+            <button
+              onClick={closeDeleteDialog}
+              className="absolute right-4 top-4 rounded-full p-1 text-[#8999b3] transition-colors hover:bg-gray-100 hover:text-[#0a2540]"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                <Trash2 className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-[#0a2540]">Delete Post?</h3>
+                <p className="text-sm text-[#3b5a82]">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-[#3b5a82]">
+              Are you sure you want to delete <strong className="text-[#0a2540]">"{deleteDialog.title}"</strong>? This will permanently remove it from the blog.
+            </p>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={closeDeleteDialog}
+                className="flex-1 rounded-full border border-[#d7e5fc] px-4 py-2.5 text-sm font-medium text-[#0a2540] transition-colors hover:bg-[#f8fbff]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeDelete}
+                className="flex-1 rounded-full bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700"
+              >
+                Delete Post
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
