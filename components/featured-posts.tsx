@@ -1,9 +1,17 @@
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
-import { getFeaturedPosts } from "@/lib/blog-data"
+import { getAllBlogPosts } from "@/lib/sanity"
 
-export function FeaturedPosts() {
-  const posts = getFeaturedPosts()
+export async function FeaturedPosts() {
+  const allPosts = await getAllBlogPosts()
+  
+  // Get featured posts (only show up to 2 for the homepage layout)
+  const featuredPosts = allPosts
+    .filter(post => post.featured === true)
+    .slice(0, 2)
+  
+  // If no featured posts, fall back to the 2 most recent posts
+  const posts = featuredPosts.length > 0 ? featuredPosts : allPosts.slice(0, 2)
 
   return (
     <section className="py-20 lg:py-24">
