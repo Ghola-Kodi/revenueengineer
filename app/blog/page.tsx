@@ -2,13 +2,15 @@ import type { Metadata } from "next"
 import { BlogList } from "@/components/blog-list"
 import { getAllBlogPosts } from "@/lib/sanity"
 
+// ✅ ADD THIS - Force dynamic rendering to prevent stale caching
+export const dynamic = "force-dynamic"
+
 export const metadata: Metadata = {
   title: "Blog | RevEng",
   description:
     "Articles on revenue recovery, Stripe optimization, dunning management, and integration guides for Klaviyo and GoHighLevel.",
 }
 
-// ✅ Make sure this is the default export and returns JSX
 export default async function BlogPage() {
   const posts = await getAllBlogPosts()
 
