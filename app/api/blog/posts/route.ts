@@ -4,6 +4,9 @@ import { deleteFakePost, getFakePosts, saveFakePost, updateFakePost } from "@/li
 import { requireAdmin } from "@/lib/api-auth"
 import { createClient } from "@sanity/client"
 
+// ✅ ADD THIS - Force dynamic rendering to prevent stale caching
+export const dynamic = "force-dynamic"
+
 // Initialize Sanity client for the API
 const sanityClient = createClient({
   projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID,
@@ -250,7 +253,14 @@ export async function DELETE(request: Request) {
   if (!deleted || getTestMode()) {
     try {
       if (!process.env.SANITY_API_TOKEN) {
-        console.warn("ℹ️ SANITY_API_TOKEN not configured, skipping Sanity delete")
+        // ✅ Return clear error if token is missing
+        return NextResponse.json(
+          { 
+            error: "SANITY_API_TOKEN is not configured",
+            details: "Add SANITY_API_TOKEN to your environment variables"
+          },
+          { status: 500 }
+        )
       } else {
         const query = `*[_type == "${DOC_TYPE}" && slug.current == $slug][0]._id`
         const id = await sanityClient.fetch(query, { slug })
@@ -265,7 +275,15 @@ export async function DELETE(request: Request) {
         }
       }
     } catch (error) {
+      // ✅ Return the actual error instead of swallowing it
       console.error("❌ Error deleting from Sanity:", error)
+      return NextResponse.json(
+        { 
+          error: "Failed to delete from Sanity",
+          details: error instanceof Error ? error.message : String(error)
+        },
+        { status: 500 }
+      )
     }
   }
 
