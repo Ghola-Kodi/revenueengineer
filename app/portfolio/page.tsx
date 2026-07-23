@@ -32,55 +32,44 @@ import { NewsletterSection } from "@/components/newsletter-section"
 // ---------------------------------------------------------------------------
 const flagshipProjects = [
   {
-    id: "flagship-webhook-reliability",
+    id: "flagship-reveng",
     category: "Flagship Projects",
-    title: "Stripe Webhook Reliability Layer",
+    title: "RevEng — Stripe Webhook & Revenue Recovery Engine",
     description:
-      "A verify-enqueue-single-writer architecture that eliminates duplicate charges, out-of-order event bugs, and concurrent-write data corruption. Includes a side-by-side load test: naive handler vs. this pattern, showing exactly where the naive version breaks.",
-    tags: ["Webhooks", "Race Conditions", "Idempotency", "Demo Build"],
+      "A live, deployed platform: a webhook engine handling 12 critical Stripe event types with idempotent storage and HMAC signature verification, a real-time payment-health signal dashboard (authorization, failure, recovery, and dispute rates), and a decline-code-aware dunning engine with Klaviyo/Postmark integration that exits the moment a payment succeeds.",
+    tags: ["Webhooks", "Dunning", "Klaviyo", "Live Project"],
     icon: Webhook,
     metrics: [
-      { label: "Handler Code", value: "-95% LOC" },
-      { label: "Data Corruption Under Load", value: "0 events" },
+      { label: "Webhook Events Handled", value: "12 types" },
+      { label: "Signature Verification", value: "HMAC + idempotent" },
     ],
+    liveUrl: "https://revenuerecovengine.vercel.app/",
   },
   {
-    id: "flagship-dunning-engine",
+    id: "flagship-yoursaas",
     category: "Flagship Projects",
-    title: "Configurable Dunning Engine",
+    title: "SaaS Stripe Subscription Billing Starter",
     description:
-      "Smart retry scheduling that replaces Stripe's naive fixed-interval retries with timezone- and failure-reason-aware logic, plus card-updater integration and a recovery dashboard. Built to directly target involuntary churn, which accounts for a large share of total SaaS churn in most subscription businesses.",
-    tags: ["Dunning", "Smart Retries", "Failure Routing", "Demo Build"],
-    icon: RefreshCcw,
+      "A live, deployed Stripe integration starter kit — subscription billing, checkout flow, and webhook handling built into a clean SaaS front end. Useful as a working reference for founders who want to see subscription billing wired up correctly before committing to a bigger build.",
+    tags: ["Subscriptions", "Checkout", "Starter Kit", "Live Project"],
+    icon: CreditCard,
     metrics: [
-      { label: "Target Recovery Rate", value: "~35-45%" },
-      { label: "Retry Logic", value: "Failure-aware" },
+      { label: "Billing Model", value: "Subscriptions" },
+      { label: "Status", value: "Deployed" },
     ],
-  },
-  {
-    id: "flagship-klaviyo-recovery-pipeline",
-    category: "Flagship Projects",
-    title: "Klaviyo + Stripe Revenue Recovery Pipeline",
-    description:
-      "A working Stripe-to-Klaviyo event bridge triggering segmented flows: card-expiring-soon warnings, a payment-failed day 1/3/7 sequence, and cancellation win-back. Closes the gap between 'Stripe knows a payment failed' and 'the customer actually sees a good email about it.'",
-    tags: ["Klaviyo", "Lifecycle Email", "Segmentation", "Demo Build"],
-    icon: Mail,
-    metrics: [
-      { label: "Flow Steps", value: "3 sequences" },
-      { label: "Trigger Latency", value: "<1 min" },
-    ],
+    liveUrl: "https://saas-stripe-intergration-with-webho.vercel.app/",
   },
   {
     id: "flagship-usage-billing-caps",
     category: "Flagship Projects",
     title: "Usage-Based Billing Dashboard with Real-Time Spend Caps",
     description:
-      "A metered-billing demo that solves the gap in Stripe's Meter Events API: it records usage but doesn't stop overage or show a live balance. This build adds near-real-time usage tracking, a customer-facing balance display, and a hard spend cap that fires before Stripe processes an overage charge — the exact visibility gap behind several public AI-product billing incidents in 2025.",
-    tags: ["Metered Billing", "Spend Caps", "Usage Tracking", "Demo Build"],
+      "A metered-billing build that solves the gap in Stripe's Meter Events API: it records usage but doesn't stop overage or show a live balance. This adds near-real-time usage tracking, a customer-facing balance display, and a hard spend cap that fires before Stripe processes an overage charge — the exact visibility gap behind several public AI-product billing incidents in 2025.",
+    tags: ["Metered Billing", "Spend Caps", "Usage Tracking", "In Progress"],
     icon: Gauge,
     metrics: [
-      { label: "Usage Visibility", value: "Real-time" },
-      { label: "Overage Protection", value: "Hard cap" },
+      { label: "Usage Visibility", value: "Real-time (planned)" },
+      { label: "Overage Protection", value: "Hard cap (planned)" },
     ],
   },
   {
@@ -89,11 +78,11 @@ const flagshipProjects = [
     title: "Stripe Connect Payout Reconciliation Tool",
     description:
       "Pulls Stripe balance transactions across 40+ transaction types and auto-categorizes them into a clean clearing-account model, flags mismatches, and exports a bookkeeper-ready CSV. Built for marketplace and platform founders drowning in Connect payout reconciliation.",
-    tags: ["Stripe Connect", "Reconciliation", "Marketplaces", "Demo Build"],
+    tags: ["Stripe Connect", "Reconciliation", "Marketplaces", "In Progress"],
     icon: FileSpreadsheet,
     metrics: [
-      { label: "Transaction Types Mapped", value: "40+" },
-      { label: "Manual Matching", value: "Eliminated" },
+      { label: "Transaction Types Mapped", value: "40+ (planned)" },
+      { label: "Manual Matching", value: "Eliminated (planned)" },
     ],
   },
 ]
@@ -271,6 +260,7 @@ type Project = {
   tags: string[]
   icon: React.ComponentType<{ className?: string }>
   metrics: { label: string; value: string }[]
+  liveUrl?: string
 }
 
 function ProjectCard({ project }: { project: Project }) {
@@ -293,19 +283,33 @@ function ProjectCard({ project }: { project: Project }) {
           {project.description}
         </p>
         <div className="mt-4 flex flex-wrap gap-1.5">
-          {project.tags.map((tag) => (
-            <span
-              key={tag}
-              className={
-                tag === "Demo Build"
-                  ? "rounded-full border border-[#635bff]/30 bg-[#f5f3ff] px-2.5 py-0.5 text-[11px] font-medium text-[#635bff]"
-                  : "rounded-full border border-[#deeaf5] px-2.5 py-0.5 text-[11px] text-[#3b5a82]"
-              }
-            >
-              {tag}
-            </span>
-          ))}
+          {project.tags.map((tag) => {
+            let tagClass = "rounded-full border border-[#deeaf5] px-2.5 py-0.5 text-[11px] text-[#3b5a82]"
+            if (tag === "Live Project") {
+              tagClass =
+                "rounded-full border border-[#16a34a]/30 bg-[#f0fdf4] px-2.5 py-0.5 text-[11px] font-medium text-[#16a34a]"
+            } else if (tag === "In Progress" || tag === "Demo Build") {
+              tagClass =
+                "rounded-full border border-[#635bff]/30 bg-[#f5f3ff] px-2.5 py-0.5 text-[11px] font-medium text-[#635bff]"
+            }
+            return (
+              <span key={tag} className={tagClass}>
+                {tag}
+              </span>
+            )
+          })}
         </div>
+        {project.liveUrl && (
+          <a
+            href={project.liveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#635bff] hover:opacity-80"
+          >
+            View live demo
+            <ArrowRight className="h-3.5 w-3.5" />
+          </a>
+        )}
       </div>
       <div className="border-t border-[#deeaf5]">
         <div className="flex divide-x divide-[#deeaf5]">
@@ -367,10 +371,13 @@ export default function PortfolioPage() {
             Here is the kind of work I do: Stripe + Klaviyo payment-triggered email
             flows, GHL + Stripe pipeline automations, and the cross-platform
             architecture that connects marketing, sales, and payments into a
-            single revenue engine. The five projects below marked{" "}
-            <span className="font-medium text-[#635bff]">Demo Build</span> are
-            self-built to prove the pattern against real-world pain points
-            surfaced from client job posts and developer communities.
+            single revenue engine. Projects marked{" "}
+            <span className="font-medium text-[#16a34a]">Live Project</span>{" "}
+            are deployed and linked — click through and see them running.
+            Projects marked{" "}
+            <span className="font-medium text-[#635bff]">In Progress</span>{" "}
+            are builds scoped to real pain points surfaced from client job
+            posts and developer communities, currently underway.
           </p>
         </div>
 
