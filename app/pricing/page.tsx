@@ -14,7 +14,9 @@ const tiers = [
     description:
       "Comprehensive analysis of your Stripe configuration, webhook architecture, and dunning gaps. Delivered as a prioritized action plan.",
     popular: false,
-    stripePriceId: "price_stripe_audit", // Replace with your actual Stripe Price ID
+    // Maps to the "Standard" tier of the Payment Health Check & Audit Project Catalog listing.
+    upworkUrl:
+      "https://www.upwork.com/services/product/development-it-stripe-payment-health-check-audit-2032395538635121637",
     features: [
       "Full webhook event analysis",
       "Dunning gap identification",
@@ -33,7 +35,9 @@ const tiers = [
     description:
       "Full dunning system build: Stripe retry configuration, multi-channel recovery flows, webhook architecture, and Klaviyo/GHL integration.",
     popular: true,
-    stripePriceId: "price_dunning_engine", // Replace with your actual Stripe Price ID
+    // Maps to the "Advanced" tier (Audit + Dunning Engine built and live) of the same listing.
+    upworkUrl:
+      "https://www.upwork.com/services/product/development-it-stripe-payment-health-check-audit-2032395538635121637",
     features: [
       "Everything in Stripe Audit",
       "Smart retry schedule configuration",
@@ -54,7 +58,9 @@ const tiers = [
     description:
       "Ongoing optimization of your revenue recovery system. Monthly analysis, A/B testing, and continuous improvement of recovery rates.",
     popular: false,
-    stripePriceId: "price_retention_retainer", // Replace with your actual Stripe Price ID
+    // No Project Catalog equivalent — Catalog is fixed-price/one-off, so retainers route to
+    // the freelancer profile for a custom contract instead of a specific listing.
+    upworkUrl: "https://www.upwork.com/freelancers/~015231a7c2a38eae6b",
     features: [
       "Monthly recovery rate analysis",
       "Dunning email A/B testing",
@@ -82,19 +88,19 @@ export default function PricingPage() {
       .catch(() => setProducts([]))
   }, [testMode])
 
-  // ✅ Updated: Handle checkout for both test mode and real Stripe
-  const handleCheckout = async (priceId: string, tierName: string) => {
-    setIsLoading(tierName)
+  // Digital products still check out through Stripe directly — only the service
+  // tiers above route to Upwork.
+  const handleCheckout = async (priceId: string, productName: string) => {
+    setIsLoading(productName)
 
     try {
-      // If in test mode, use the test checkout endpoint
       if (testMode) {
         const response = await fetch("/api/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             priceId,
-            mode: "test"
+            mode: "test",
           }),
         })
         const data = await response.json()
@@ -106,11 +112,10 @@ export default function PricingPage() {
         return
       }
 
-      // ✅ NEW: Real Stripe checkout
       const response = await fetch("/api/stripe/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           priceId,
           successUrl: `${window.location.origin}/dashboard?checkout=success`,
           cancelUrl: `${window.location.origin}/pricing?checkout=canceled`,
@@ -123,7 +128,6 @@ export default function PricingPage() {
         throw new Error(data.error || "Failed to create checkout session")
       }
 
-      // Redirect to Stripe Checkout
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl
       } else {
@@ -154,6 +158,9 @@ export default function PricingPage() {
             Every package starts with understanding where your revenue is going and
             ends with systems that bring it back. Clear scope, fixed pricing, measurable
             impact.
+          </p>
+          <p className="mt-2 text-xs text-[#3b5a82]">
+            Booked and paid securely through Upwork Payment Protection.
           </p>
         </div>
 
@@ -208,18 +215,19 @@ export default function PricingPage() {
                 </ul>
 
                 <div className="mt-8">
-                  <button
-                    onClick={() => handleCheckout(tier.stripePriceId, tier.name)}
-                    disabled={isLoading === tier.name}
-                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50 ${
+                  <a
+                    href={tier.upworkUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90 ${
                       tier.popular
                         ? "bg-[#635bff] text-white shadow-lg shadow-[#635bff]/25"
                         : "border border-[#b9cef0] bg-[#f5faff] text-[#0a2540]"
                     }`}
                   >
-                    {isLoading === tier.name ? "Processing..." : tier.cta}
-                    {isLoading !== tier.name && <ArrowRight className="h-4 w-4" />}
-                  </button>
+                    {tier.cta}
+                    <ArrowRight className="h-4 w-4" />
+                  </a>
                 </div>
               </div>
             </div>
@@ -251,8 +259,8 @@ export default function PricingPage() {
                   disabled={isLoading === product.name}
                   className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#635bff] transition-opacity hover:opacity-80 disabled:opacity-50"
                 >
-                  {isLoading === product.name 
-                    ? "Processing..." 
+                  {isLoading === product.name
+                    ? "Processing..."
                     : product.price_cents === 0 ? "Download Now" : "Buy"
                   }
                   {isLoading !== product.name && <ArrowRight className="h-3.5 w-3.5" />}
