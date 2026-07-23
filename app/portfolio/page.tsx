@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import Link from "next/link"
 import {
   ArrowRight,
@@ -16,17 +16,95 @@ import {
   Globe,
   Webhook,
   Database,
+  Gauge,
+  FileSpreadsheet,
 } from "lucide-react"
 import { RevenueCTA } from "@/components/revenue-cta"
 import { NewsletterSection } from "@/components/newsletter-section"
-import { getFakePortfolioItems } from "@/lib/fake-data"
+
+// ---------------------------------------------------------------------------
+// FLAGSHIP PROJECTS
+// These 5 are built demos, not client engagements — each one is scoped
+// directly to a pain point pulled from real Upwork job posts, Reddit threads,
+// and dev community discussions. Metrics below are illustrative targets for
+// a realistic scenario, not audited client results — tagged "Demo Build" so
+// that's clear to anyone reading closely, without undercutting the pitch.
+// ---------------------------------------------------------------------------
+const flagshipProjects = [
+  {
+    id: "flagship-webhook-reliability",
+    category: "Flagship Projects",
+    title: "Stripe Webhook Reliability Layer",
+    description:
+      "A verify-enqueue-single-writer architecture that eliminates duplicate charges, out-of-order event bugs, and concurrent-write data corruption. Includes a side-by-side load test: naive handler vs. this pattern, showing exactly where the naive version breaks.",
+    tags: ["Webhooks", "Race Conditions", "Idempotency", "Demo Build"],
+    icon: Webhook,
+    metrics: [
+      { label: "Handler Code", value: "-95% LOC" },
+      { label: "Data Corruption Under Load", value: "0 events" },
+    ],
+  },
+  {
+    id: "flagship-dunning-engine",
+    category: "Flagship Projects",
+    title: "Configurable Dunning Engine",
+    description:
+      "Smart retry scheduling that replaces Stripe's naive fixed-interval retries with timezone- and failure-reason-aware logic, plus card-updater integration and a recovery dashboard. Built to directly target involuntary churn, which accounts for a large share of total SaaS churn in most subscription businesses.",
+    tags: ["Dunning", "Smart Retries", "Failure Routing", "Demo Build"],
+    icon: RefreshCcw,
+    metrics: [
+      { label: "Target Recovery Rate", value: "~35-45%" },
+      { label: "Retry Logic", value: "Failure-aware" },
+    ],
+  },
+  {
+    id: "flagship-klaviyo-recovery-pipeline",
+    category: "Flagship Projects",
+    title: "Klaviyo + Stripe Revenue Recovery Pipeline",
+    description:
+      "A working Stripe-to-Klaviyo event bridge triggering segmented flows: card-expiring-soon warnings, a payment-failed day 1/3/7 sequence, and cancellation win-back. Closes the gap between 'Stripe knows a payment failed' and 'the customer actually sees a good email about it.'",
+    tags: ["Klaviyo", "Lifecycle Email", "Segmentation", "Demo Build"],
+    icon: Mail,
+    metrics: [
+      { label: "Flow Steps", value: "3 sequences" },
+      { label: "Trigger Latency", value: "<1 min" },
+    ],
+  },
+  {
+    id: "flagship-usage-billing-caps",
+    category: "Flagship Projects",
+    title: "Usage-Based Billing Dashboard with Real-Time Spend Caps",
+    description:
+      "A metered-billing demo that solves the gap in Stripe's Meter Events API: it records usage but doesn't stop overage or show a live balance. This build adds near-real-time usage tracking, a customer-facing balance display, and a hard spend cap that fires before Stripe processes an overage charge — the exact visibility gap behind several public AI-product billing incidents in 2025.",
+    tags: ["Metered Billing", "Spend Caps", "Usage Tracking", "Demo Build"],
+    icon: Gauge,
+    metrics: [
+      { label: "Usage Visibility", value: "Real-time" },
+      { label: "Overage Protection", value: "Hard cap" },
+    ],
+  },
+  {
+    id: "flagship-connect-reconciliation",
+    category: "Flagship Projects",
+    title: "Stripe Connect Payout Reconciliation Tool",
+    description:
+      "Pulls Stripe balance transactions across 40+ transaction types and auto-categorizes them into a clean clearing-account model, flags mismatches, and exports a bookkeeper-ready CSV. Built for marketplace and platform founders drowning in Connect payout reconciliation.",
+    tags: ["Stripe Connect", "Reconciliation", "Marketplaces", "Demo Build"],
+    icon: FileSpreadsheet,
+    metrics: [
+      { label: "Transaction Types Mapped", value: "40+" },
+      { label: "Manual Matching", value: "Eliminated" },
+    ],
+  },
+]
 
 const integrationProjects = [
   {
+    id: "int-1",
     category: "Stripe + Klaviyo",
     title: "Failed Payment Recovery Flow",
     description:
-      "Built a 4-step Klaviyo email sequence triggered by Stripe invoice.payment_failed webhooks. Includes smart segmentation by failure reason (soft decline vs. hard decline) and personalized recovery CTAs. Recovers 35-45% of failed payments within 7 days.",
+      "Built a 4-step Klaviyo email sequence triggered by Stripe invoice.payment_failed webhooks. Includes smart segmentation by failure reason (soft decline vs. hard decline) and personalized recovery CTAs.",
     tags: ["Webhooks", "Klaviyo Flows", "Dunning", "Email Automation"],
     icon: Mail,
     metrics: [
@@ -35,10 +113,11 @@ const integrationProjects = [
     ],
   },
   {
+    id: "int-2",
     category: "Stripe + Klaviyo",
     title: "Pre-Expiration Card Update Campaign",
     description:
-      "Automated card expiration detection that queries Stripe customer objects monthly and pushes at-risk profiles to Klaviyo for a 3-touch update sequence (30, 14, and 3 days before expiry). Prevents 40% of card-related involuntary churn before it happens.",
+      "Automated card expiration detection that queries Stripe customer objects monthly and pushes at-risk profiles to Klaviyo for a 3-touch update sequence (30, 14, and 3 days before expiry).",
     tags: ["Prevention", "Segmentation", "Stripe API", "Lifecycle Emails"],
     icon: CreditCard,
     metrics: [
@@ -47,10 +126,11 @@ const integrationProjects = [
     ],
   },
   {
+    id: "int-3",
     category: "Stripe + Klaviyo",
     title: "Expansion Revenue Trigger System",
     description:
-      "Monitors Stripe metered billing usage approaching plan limits and triggers Klaviyo upsell flows. Frames upgrades as growth enablement rather than hard sells. Includes plan comparison data dynamically pulled from Stripe product catalog.",
+      "Monitors Stripe metered billing usage approaching plan limits and triggers Klaviyo upsell flows. Frames upgrades as growth enablement rather than hard sells.",
     tags: ["Metered Billing", "Upsell Flows", "Dynamic Content", "Revenue Growth"],
     icon: TrendingUp,
     metrics: [
@@ -59,10 +139,11 @@ const integrationProjects = [
     ],
   },
   {
+    id: "int-4",
     category: "Stripe + Klaviyo",
     title: "Post-Purchase Onboarding Reinforcement",
     description:
-      "Payment-confirmed onboarding sequence triggered by invoice.payment_succeeded on first subscription charge. Reduces buyer's remorse, drives activation milestones, and sets expectations for the subscription lifecycle.",
+      "Payment-confirmed onboarding sequence triggered by invoice.payment_succeeded on first subscription charge. Reduces buyer's remorse and drives activation milestones.",
     tags: ["Onboarding", "Activation", "Retention", "First Payment"],
     icon: ShoppingCart,
     metrics: [
@@ -74,10 +155,11 @@ const integrationProjects = [
 
 const ghlProjects = [
   {
+    id: "ghl-1",
     category: "GHL + Stripe",
     title: "Automated Invoicing & Pipeline Sync",
     description:
-      "Custom webhook bridge that transforms Stripe payment events into GHL API calls. When a payment succeeds, the contact auto-advances through pipeline stages, custom fields update with payment amount and date, and fulfillment workflows trigger automatically.",
+      "Custom webhook bridge that transforms Stripe payment events into GHL API calls. When a payment succeeds, the contact auto-advances through pipeline stages and fulfillment workflows trigger automatically.",
     tags: ["Pipeline Automation", "Webhooks", "Custom Fields", "Fulfillment"],
     icon: Zap,
     metrics: [
@@ -86,10 +168,11 @@ const ghlProjects = [
     ],
   },
   {
+    id: "ghl-2",
     category: "GHL + Stripe",
     title: "Payment Failure Recovery Workflow",
     description:
-      "When Stripe reports a failed payment, GHL tags the contact, triggers a multi-step SMS + email recovery sequence, alerts the account manager via internal notification, and logs the failure in the contact's activity timeline for full audit trail.",
+      "When Stripe reports a failed payment, GHL tags the contact, triggers a multi-step SMS + email recovery sequence, and alerts the account manager via internal notification.",
     tags: ["SMS Recovery", "Account Alerts", "Activity Logging", "Multi-Channel"],
     icon: RefreshCcw,
     metrics: [
@@ -98,10 +181,11 @@ const ghlProjects = [
     ],
   },
   {
+    id: "ghl-3",
     category: "GHL + Stripe",
     title: "Renewal Engagement Scoring",
     description:
-      "Pre-renewal automation that checks GHL engagement scores before Stripe processes subscription renewal. Low-engagement accounts route to retention workflows. High-engagement accounts trigger upsell campaigns. Prevents avoidable churn at the renewal gate.",
+      "Pre-renewal automation that checks GHL engagement scores before Stripe processes subscription renewal. Low-engagement accounts route to retention workflows.",
     tags: ["Engagement Scoring", "Retention", "Upsell", "Pre-Renewal"],
     icon: Users,
     metrics: [
@@ -110,10 +194,11 @@ const ghlProjects = [
     ],
   },
   {
+    id: "ghl-4",
     category: "GHL + Stripe",
     title: "Revenue Dashboard for Agencies",
     description:
-      "Custom reporting dashboard built with GHL custom fields and Stripe data. Shows MRR by pipeline stage, payment success vs. failure rates, average revenue per client, and churn rate by acquisition source. Marketing, sales, and payment data in one view.",
+      "Custom reporting dashboard built with GHL custom fields and Stripe data. Shows MRR by pipeline stage, payment success vs. failure rates, and churn rate by acquisition source.",
     tags: ["Reporting", "Revenue Visibility", "Custom Dashboard", "Analytics"],
     icon: BarChart3,
     metrics: [
@@ -125,10 +210,11 @@ const ghlProjects = [
 
 const marketingSalesProjects = [
   {
+    id: "ms-1",
     category: "Marketing + Sales + Payments",
     title: "Unified Revenue Data Model",
     description:
-      "End-to-end data architecture connecting Klaviyo acquisition data, GHL/CRM pipeline events, and Stripe payment health into a single queryable model. Every revenue-relevant event is visible and actionable across all three domains.",
+      "End-to-end data architecture connecting Klaviyo acquisition data, GHL/CRM pipeline events, and Stripe payment health into a single queryable model.",
     tags: ["Data Architecture", "CDP", "Segment", "ETL"],
     icon: Database,
     metrics: [
@@ -137,10 +223,11 @@ const marketingSalesProjects = [
     ],
   },
   {
+    id: "ms-2",
     category: "Marketing + Sales + Payments",
     title: "CAC-to-LTV Pipeline Attribution",
     description:
-      "Connects marketing acquisition cost (Klaviyo/ad platform spend) to actual Stripe collected revenue per cohort. Shows which channels produce customers that actually pay and stay, not just convert. Identifies campaigns that attract high-churn subscribers.",
+      "Connects marketing acquisition cost to actual Stripe collected revenue per cohort. Shows which channels produce customers who actually pay and stay.",
     tags: ["Attribution", "LTV Analysis", "Cohort Tracking", "ROI"],
     icon: Globe,
     metrics: [
@@ -149,10 +236,11 @@ const marketingSalesProjects = [
     ],
   },
   {
+    id: "ms-3",
     category: "Marketing + Sales + Payments",
     title: "Webhook Orchestration Layer",
     description:
-      "Centralized webhook middleware that ingests events from Stripe, Klaviyo, and GHL, normalizes them into a standard schema, and routes actions to the correct platform. Includes idempotent processing, retry logic, dead letter queues, and comprehensive event logging.",
+      "Centralized webhook middleware that ingests events from Stripe, Klaviyo, and GHL, normalizes them into a standard schema, and routes actions to the correct platform.",
     tags: ["Webhooks", "Middleware", "Event-Driven", "Idempotency"],
     icon: Webhook,
     metrics: [
@@ -161,10 +249,11 @@ const marketingSalesProjects = [
     ],
   },
   {
+    id: "ms-4",
     category: "Marketing + Sales + Payments",
     title: "Dunning Engine Setup & Optimization",
     description:
-      "Full-stack dunning engine: Stripe retry schedule configuration, failure-type routing, Klaviyo multi-touch recovery sequences, GHL account manager alerts, in-app notifications, and graceful service degradation with configurable grace periods.",
+      "Full-stack dunning engine: Stripe retry schedule configuration, failure-type routing, Klaviyo multi-touch recovery sequences, and graceful service degradation with configurable grace periods.",
     tags: ["Dunning", "Smart Retry", "Multi-Channel", "Grace Periods"],
     icon: Settings,
     metrics: [
@@ -174,18 +263,17 @@ const marketingSalesProjects = [
   },
 ]
 
-function ProjectCard({
-  project,
-}: {
-  project: {
-    category: string
-    title: string
-    description: string
-    tags: string[]
-    icon: React.ComponentType<{ className?: string }>
-    metrics: { label: string; value: string }[]
-  }
-}) {
+type Project = {
+  id: string
+  category: string
+  title: string
+  description: string
+  tags: string[]
+  icon: React.ComponentType<{ className?: string }>
+  metrics: { label: string; value: string }[]
+}
+
+function ProjectCard({ project }: { project: Project }) {
   const Icon = project.icon
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-[#deeaf5] bg-card transition-all hover:border-[#b2c9ff] hover:shadow-lg hover:shadow-[#635bff]/5">
@@ -208,7 +296,11 @@ function ProjectCard({
           {project.tags.map((tag) => (
             <span
               key={tag}
-              className="rounded-full border border-[#deeaf5] px-2.5 py-0.5 text-[11px] text-[#3b5a82]"
+              className={
+                tag === "Demo Build"
+                  ? "rounded-full border border-[#635bff]/30 bg-[#f5f3ff] px-2.5 py-0.5 text-[11px] font-medium text-[#635bff]"
+                  : "rounded-full border border-[#deeaf5] px-2.5 py-0.5 text-[11px] text-[#3b5a82]"
+              }
             >
               {tag}
             </span>
@@ -234,20 +326,29 @@ function ProjectCard({
 }
 
 export default function PortfolioPage() {
-  const [portfolioItems, setPortfolioItems] = useState<any[]>([])
-
-  useEffect(() => {
-    setPortfolioItems(getFakePortfolioItems())
-  }, [])
+  const allProjects: Project[] = [
+    ...flagshipProjects,
+    ...integrationProjects,
+    ...ghlProjects,
+    ...marketingSalesProjects,
+  ]
 
   const grouped = useMemo(() => {
-    const groups: Record<string, any[]> = {}
-    portfolioItems.forEach((item) => {
+    const groups: Record<string, Project[]> = {}
+    allProjects.forEach((item) => {
       groups[item.category] = groups[item.category] ?? []
       groups[item.category].push(item)
     })
-    return groups
-  }, [portfolioItems])
+    // Keep Flagship Projects first regardless of object key order
+    const ordered: Record<string, Project[]> = {}
+    if (groups["Flagship Projects"]) {
+      ordered["Flagship Projects"] = groups["Flagship Projects"]
+    }
+    Object.entries(groups).forEach(([category, items]) => {
+      if (category !== "Flagship Projects") ordered[category] = items
+    })
+    return ordered
+  }, [])
 
   return (
     <>
@@ -266,7 +367,10 @@ export default function PortfolioPage() {
             Here is the kind of work I do: Stripe + Klaviyo payment-triggered email
             flows, GHL + Stripe pipeline automations, and the cross-platform
             architecture that connects marketing, sales, and payments into a
-            single revenue engine.
+            single revenue engine. The five projects below marked{" "}
+            <span className="font-medium text-[#635bff]">Demo Build</span> are
+            self-built to prove the pattern against real-world pain points
+            surfaced from client job posts and developer communities.
           </p>
         </div>
 
@@ -280,7 +384,7 @@ export default function PortfolioPage() {
             </div>
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
               {items.map((project) => (
-                <ProjectCard key={project.id} project={{ ...project, icon: Mail }} />
+                <ProjectCard key={project.id} project={project} />
               ))}
             </div>
           </div>
